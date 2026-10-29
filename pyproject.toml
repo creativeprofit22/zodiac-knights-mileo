@@ -24,3 +24,5 @@ pythonpath = ["src", "."]
 
 [tool.pyright]
 extraPaths = ["src", "."]
+# downloaded tools ship their own scripts (e.g. Ghidra Jython); not our code
+exclude = ["tools", "workspace", "raw", "**/__pycache__", "**/.*"]

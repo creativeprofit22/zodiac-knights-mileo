@@ -23,7 +23,9 @@ def _stage(tmp_path, fail=False):
     src = tmp_path / "fake_stage.py"
     src.write_text("# fake stage\n", encoding="utf-8")
     mod = types.ModuleType("fake_stage")
-    mod.NAME, mod.HELP, mod.__file__ = "dumpit", "fake stage", str(src)
+    mod.__file__ = str(src)
+    setattr(mod, "NAME", "dumpit")
+    setattr(mod, "HELP", "fake stage")
 
     def execute(ctx, args):
         out = ctx.ws.dir("il2cpp", "1.0")
@@ -32,7 +34,7 @@ def _stage(tmp_path, fail=False):
         if fail:
             raise RuntimeError("boom")
         return info
-    mod.execute = execute
+    setattr(mod, "execute", execute)
     return mod
 
 
