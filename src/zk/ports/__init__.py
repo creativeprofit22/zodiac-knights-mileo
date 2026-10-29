@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from zk.core.contracts import ArtifactContract
 
 from . import (decompiler, device_source, ghidra, il2cpp_assemblies, il2cpp_crosscheck, il2cpp_dump,
-               java_decompiler, type_info)
+               java_decompiler, type_info, video_encoder)
 
 
 @dataclass(frozen=True)
@@ -25,4 +25,5 @@ PORTS: dict[str, Port] = {p.name: p for p in (
     Port(decompiler.PORT, decompiler.Decompiler, decompiler.CONTRACT),
     Port(type_info.PORT, type_info.TypeInfo, type_info.CONTRACT),
     Port(ghidra.PORT, ghidra.Ghidra, ghidra.CONTRACT),
+    Port(video_encoder.PORT, video_encoder.VideoEncoder, video_encoder.CONTRACT),
 )}

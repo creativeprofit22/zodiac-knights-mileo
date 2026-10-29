@@ -14,6 +14,7 @@ il2cpp_assemblies = "cpp2il"
 decompiler = "ilspycmd"
 type_info = "typetree_dummydll"   # typetree_cpp2il: see docs/ports/type_info.md
 ghidra = "ghidra"
+video_encoder = "ffmpeg"         # only `zk video --encode`; ffmpeg must be on PATH or [options.video_encoder] path
 
 # Adapter settings, one table per port. The folder device_source imports an APK or a pulled folder:
 # [options.device_source]

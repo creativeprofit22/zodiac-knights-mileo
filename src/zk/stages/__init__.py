@@ -13,7 +13,7 @@ import importlib
 from types import ModuleType
 
 # Order = natural pipeline order. Each stage phase appends its module here.
-STAGE_MODULES: tuple[str, ...] = ("acquire", "unpack", "code", "csharp", "ghidra", "assets")
+STAGE_MODULES: tuple[str, ...] = ("acquire", "unpack", "code", "csharp", "ghidra", "assets", "video")
 
 
 def load_all(names: tuple[str, ...] | None = None) -> list[ModuleType]:

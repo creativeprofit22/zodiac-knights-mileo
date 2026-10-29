@@ -1,6 +1,6 @@
 # Architecture
 
-`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md); `il2cpp_dump` v2 and `il2cpp_crosscheck` in [ADR 0003](adr/0003-il2cpp-dump-v2.md); `decompiler` v2, `java_decompiler` and `il2cpp_assemblies` in [ADR 0004](adr/0004-decompiler-v2.md); `ghidra` v2 in [ADR 0005](adr/0005-ghidra-v2.md); `type_info` v2 in [ADR 0006](adr/0006-type-info-v2.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
+`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md); `il2cpp_dump` v2 and `il2cpp_crosscheck` in [ADR 0003](adr/0003-il2cpp-dump-v2.md); `decompiler` v2, `java_decompiler` and `il2cpp_assemblies` in [ADR 0004](adr/0004-decompiler-v2.md); `ghidra` v2 in [ADR 0005](adr/0005-ghidra-v2.md); `type_info` v2 in [ADR 0006](adr/0006-type-info-v2.md); `video_encoder` in [ADR 0007](adr/0007-video-encoder.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
 
 ## Layout
 
@@ -33,6 +33,8 @@ device ─device_source (acquire)─▶ raw/<v>/apk/base.apk ─unpack─▶ unp
    il2cpp + MonoBehaviour classes ─type_info──▶ types/<v>/ (nodes.json)
    lib + il2cpp ─ghidra──▶ ghidra/<v>/   (project/, functions/<Ns>/<Class>.c, index.json)  zk ghidra
    unpacked Data + types ─(UnityPy)──▶ assets/<v>/ (PNG, WAV, fonts, text, shaders.json, MonoBehaviour JSON, scenes)  zk assets
+   unpacked assets/Video (.rgbv, .mp4, manifest.json) ──▶ assets/<v>/video/ (frames, report.json)  zk video
+   video frames ─video_encoder (--encode)──▶ assets/<v>/video/<clip>/encoded.mp4
    formats parse raw/unpacked bytes ──▶ data/<v>/
 ```
 

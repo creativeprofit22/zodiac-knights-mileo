@@ -16,7 +16,19 @@ def test_missing_and_verify(tmp_path):
 
 def test_every_port_has_protocol_and_contract():
     assert set(PORTS) == {"device_source", "il2cpp_dump", "il2cpp_crosscheck", "java_decompiler",
-                          "il2cpp_assemblies", "decompiler", "type_info", "ghidra"}
+                          "il2cpp_assemblies", "decompiler", "type_info", "ghidra", "video_encoder"}
     for name, port in PORTS.items():
         assert port.contract.port == name and (port.contract.files or port.contract.dirs)
         assert getattr(port.protocol, "_is_runtime_protocol", False)
+
+
+def test_video_encoder_output_must_exist_and_not_be_empty(tmp_path):
+    from zk.ports import video_encoder
+    out = tmp_path / video_encoder.OUTPUT
+    with pytest.raises(RuntimeError, match="missing encoded.mp4"):
+        video_encoder.verify_output(out)
+    out.write_bytes(b"")
+    with pytest.raises(RuntimeError, match="is empty"):
+        video_encoder.verify_output(out)
+    out.write_bytes(b"x")
+    video_encoder.verify_output(out)
