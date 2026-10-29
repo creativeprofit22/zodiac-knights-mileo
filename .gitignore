@@ -1,0 +1,24 @@
+# Game data and binaries (copyrighted, too large for GitHub)
+raw/
+workspace/
+tools/
+*.apk
+*.apks
+*.xapk
+*.obb
+*.so
+global-metadata.dat
+**/assets/bin/
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+zk.local.toml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

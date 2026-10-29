@@ -1,0 +1,60 @@
+# Foundation: pipeline-with-ports architecture, workspace and docs
+
+## Current state (audited)
+- `E:\Projects\zodiac-knights-mileo` holds only `.gg/` (empty agents/commands/skills) and `raw/0.4.6-17/` (`apk/base.apk`, `probe/{assets,dump,lib}`). No git repo, no code, no docs. Every doneWhen item is open.
+- SSA sources to copy were read: `src/ssa_re/workspace.py`, `toolchain.py`, `config.py`, `context.py`, `cli.py` (`run_stage`), `stages/__init__.py`, `stages/regress.py:code_hash` (sha256 over sorted path+bytes, CRLF→LF), `tests/test_toolchain.py`, `tests/test_ghidra.py`, `.github/workflows/ci.yml`, `pyproject.toml`.
+
+## Design decisions
+- **Layout** (src layout, like SSA): `src/zk/{core,ports,adapters,stages,formats}/`, `src/zk/cli.py`, `src/zk/__main__.py`. Stdlib only at runtime (`tomllib` → Python ≥3.11).
+- **zk/core** (pure, stdlib):
+  - `workspace.py`: copied `Workspace` with zk areas `raw, unpacked, il2cpp, code, types, ghidra, assets, data`; `manifest()`, `record()`, `current_version()` (error text says `zk`). New: `facts()` / `fact(name)` reading `manifest["game"]` and `record_facts(dict)` — game facts (version, unity_version, metadata version…) live there, never in constants; missing fact raises a clear error.
+  - `toolchain.py`: copied `Tool`, `fetch` (sha256 check, zip/file unpack into `tools/<name>-<version>/`), `path_of`, `adb`, `run`, `java_jar`. `TOOLS` seeded with SSA's jadx 1.5.6, apktool 3.0.3, jdk21, ghidra 12.1.4 entries (sha256 optional exactly as in SSA; adapter phases add tools/hashes). Il2CppDumper deliberately not copied (broken on metadata v39).
+  - `config.py`: `Config` loaded from `zk.toml` (`workspace`, `tools`, `package`, `[adapters] port = "name"`); paths resolve relative to the config file's folder; `Config.load(path=None)`.
+  - `contracts.py`: `ArtifactContract(port, files, dirs)` with `missing(out_dir) -> list[str]` and `verify(out_dir)` raising `RuntimeError` listing what's missing.
+  - `adapters.py` (resolver, no static adapter imports): `resolve(port_name, cfg)` → value `"x"` imports `zk.adapters.x`, value `"pkg.mod"` imports that module; module must expose `PORT` (must equal port name) and `create(cfg)`; result checked with the port's `runtime_checkable` Protocol. Clear errors for unconfigured port, wrong `PORT`, protocol mismatch.
+  - `context.py`: `Context(cfg, ws)` + `ctx.adapter(port)` which resolves via config and remembers `{port: adapter_name, module_file}` for the manifest.
+  - `codehash.py`: copied `code_hash(sources)`; `stage_sources(stage_module, adapter_modules)` = stage module file(s) + all of `zk/core`, `zk/ports`, `zk/formats` + adapter modules used in the run (relative POSIX paths).
+- **zk/ports** (import only `zk.core`): one module per port, each with a `runtime_checkable` Protocol + `CONTRACT: ArtifactContract` + `PORT` name, and a `PORTS` registry in `ports/__init__.py`:
+  - `device_source` — `pull(package, dest) -> dict` ; promises `base.apk`.
+  - `il2cpp_dump` — `dump(binary, metadata, out) -> dict` ; promises `dump.cs`, `script.json`, `DummyDll/`.
+  - `decompiler` — `decompile(apk, out) -> dict` ; promises `sources/`.
+  - `type_info` — `types(dump_dir, out) -> dict` ; promises `il2cpp.h`.
+  - `ghidra` — `analyze(binary, dump_dir, out) -> dict` ; promises `index.json`, `functions/`.
+  Docs state these are contract v1, changed only via a new ADR.
+- **zk/adapters/**: `__init__.py` only in this phase (real adapters are later phases). **zk/formats/**: `__init__.py` only. **zk/stages/**: copied registry contract (`NAME`, `HELP`, `add_arguments`, `execute(ctx, args)`), `STAGE_MODULES = ()` for now plus `load_all(names=STAGE_MODULES)`.
+- **cli.py**: global `--config PATH`; `zk status` (prints configured adapters + manifest), `zk tools [names]`, one subcommand per stage. `run_stage(ctx, mod, args)` = execute, then record `{**info, "code_hash", "adapters"}`; stage exceptions → nothing recorded; `RuntimeError` → exit 2 (copied behaviour).
+- **Dependency rule** (enforced by `tests/test_boundaries.py`, AST-based, resolves relative imports): `zk.core`, `zk.formats`, `zk.ports` never import `zk.stages`/`zk.adapters`/`zk.cli`; `zk.stages` never imports `zk.adapters` or `zk.core.toolchain` (stages never name/run a tool); `zk.adapters` never imports `zk.stages`.
+- **zk.toml** committed with `[adapters]` listing the five ports, all commented out until their adapter phases land.
+
+## Files to create
+- `.gitignore`: `raw/`, `workspace/`, `tools/`, `.venv/`, `*.apk`, `*.apks`, `*.xapk`, `*.obb`, `*.so`, `global-metadata.dat`, `**/assets/bin/`, `__pycache__/`, `.pytest_cache/`, `*.egg-info/`, `zk.local.toml`.
+- `pyproject.toml` (name `zk`, script `zk = "zk.cli:main"`, `dev = ["pytest==<installed version>"]`, pytest `pythonpath = ["src", "."]`).
+- `zk.toml`, `src/zk/**` as above.
+- `tests/`: `test_workspace.py`, `test_toolchain.py` (SSA's two sha256 tests + zip-kind test, `file://` URLs), `test_config.py`, `test_contracts.py`, `test_adapters.py` + `tests/fakes/{fake_dump_a.py,fake_dump_b.py,bad_port.py}` (swap proven by config only; errors for unconfigured / wrong port / protocol mismatch), `test_boundaries.py` (real tree clean; synthetic tmp trees with each violation are detected), `test_cli.py` (status, tools with a monkeypatched file:// tool, a fake stage registered via monkeypatch records `code_hash` + `adapters`; failing stage records nothing, exit 2).
+- `.github/workflows/ci.yml`: SSA's workflow (ubuntu-latest, Python 3.13, `pip install -e ".[dev]"`, `pytest -q`); no tools, no game data.
+- Docs: `docs/index.md`, `docs/architecture.md` (layout, data flow, workspace areas, manifest shape incl. `game` facts, adapter selection, dependency rule, how to add a stage/port/adapter/format), `docs/adr/0001-pipeline-with-ports.md` (context, decision, full hexagonal rejected: thin domain core, real risk is external tools breaking e.g. Perfare Il2CppDumper on metadata v39; dependency rule; consequences), `docs/stages/_template.md`, `docs/ports/_template.md` + one page per port, `docs/formats/_template.md`.
+
+## Risks
+- Contracts for the five ports are first guesses; later adapter phases may need to amend them via ADR.
+- `TOOLS` entries copied without sha256 (as in SSA); hashes get pinned when an adapter first uses each tool.
+- Windows: CRLF normalised in code hash; tests use `tmp_path` and `as_uri()` so they pass on Windows and ubuntu.
+- No commit is made (not requested); repo is only `git init`ed. `raw/` must show as ignored.
+
+## Verification
+- `python -m pytest -q` passes offline on Windows.
+- `git status --short --ignored` shows `raw/` ignored and no game files staged-able.
+- `python -m zk status` and `python -m zk tools --help` run; `python -m zk --help` lists commands.
+- Boundary test temporarily proven to fail via its synthetic-violation cases (part of the suite).
+
+## Steps
+1. Report `in-progress` via `roadmap_status`.
+2. `git init` in the project folder and write `.gitignore`; confirm `raw/` is ignored with `git status --short --ignored`.
+3. Write `pyproject.toml` (pin pytest to the installed version from `python -m pytest --version`) and `zk.toml`.
+4. Create `src/zk/core/` modules: `workspace.py`, `toolchain.py`, `config.py`, `contracts.py`, `adapters.py`, `context.py`, `codehash.py` (copied/adapted from SSA as described).
+5. Create `src/zk/ports/` with `__init__.py` (PORTS registry) and the five port modules (Protocol + CONTRACT + PORT).
+6. Create `src/zk/adapters/__init__.py`, `src/zk/formats/__init__.py`, `src/zk/stages/__init__.py` (registry), `src/zk/cli.py`, `src/zk/__init__.py`, `src/zk/__main__.py`.
+7. Write tests and fakes: `test_workspace.py`, `test_toolchain.py`, `test_config.py`, `test_contracts.py`, `test_adapters.py` with `tests/fakes/`, `test_boundaries.py`, `test_cli.py`; run `python -m pytest -q` and fix until green.
+8. Write `.github/workflows/ci.yml` copied from SSA.
+9. Write docs: `docs/index.md`, `docs/architecture.md`, `docs/adr/0001-pipeline-with-ports.md`, `docs/stages/_template.md`, `docs/ports/_template.md` plus one page per port, `docs/formats/_template.md`.
+10. Run final verification (`python -m pytest -q`, `python -m zk --help`, `python -m zk status`, `git status --short --ignored`) and grep that nothing imports `ssa_re`.
+11. Report `done` via `roadmap_status` with the test output and checks as evidence.
