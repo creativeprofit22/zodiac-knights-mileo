@@ -19,7 +19,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      # No manifest yet (static site): no install/build/test commands exist.
-      # Add pyproject.toml + uv steps here once the Python package lands.
-      - name: Build
-        run: echo "No build or test scripts defined yet"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      # No tools or game data in CI: tests use synthetic data and fake adapters only.
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Test
+        run: pytest -q

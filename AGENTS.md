@@ -1,7 +1,9 @@
 # AGENTS.md
 
 ## Commands
-- No build, test or lint commands exist yet (no manifest). The planned stack is Python (`pyproject.toml`, `uv sync`, `python -m pytest -q`); update this file when it lands.
+- Install: `pip install -e ".[dev]"` (Python >= 3.11, stdlib-only runtime).
+- Test: `python -m pytest -q` (offline, synthetic data).
+- Run: `zk status`, `zk tools [names]`, `zk <stage>`; architecture in `docs/architecture.md`.
 
 ## Rules
 - CI lives in `.github/workflows/ci.yml` and must stay green.
