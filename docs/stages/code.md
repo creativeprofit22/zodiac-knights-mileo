@@ -8,13 +8,13 @@ Recovers the game's C# types and method signatures from the IL2CPP build, checks
 ## Inputs
 - Manifest `unpack` info (written by `zk unpack`): `il2cpp[abi]`, `metadata.path` and `assemblies.game`. Paths are relative to `unpacked/<version>/`.
 - `raw/<version>/apk/*.apk`: the APK whose unpacked folder holds `classes.dex`, otherwise `base.apk`.
-- Ports: [il2cpp_dump](../ports/il2cpp_dump.md) (v2), [il2cpp_crosscheck](../ports/il2cpp_crosscheck.md), [decompiler](../ports/decompiler.md).
+- Ports: [il2cpp_dump](../ports/il2cpp_dump.md) (v2), [il2cpp_crosscheck](../ports/il2cpp_crosscheck.md), [java_decompiler](../ports/java_decompiler.md).
 
 ## Outputs
 - `il2cpp/<version>/`: the il2cpp_dump contract (`dump.cs`, `script.json`, `il2cpp.h`, `summary.json`, `DummyDll/`).
 - `il2cpp/<version>/crosscheck/`: the il2cpp_crosscheck contract (`summary.json`, plus the tool's own output).
 - `il2cpp/<version>/crosscheck.json`: the comparison report. It is written before the type check, so it exists even when the stage fails.
-- `code/<version>/`: the decompiler contract (`sources/`).
+- `code/<version>/`: the java_decompiler contract (`sources/`).
 - Manifest `code` info:
 
 | key | meaning |
@@ -23,7 +23,7 @@ Recovers the game's C# types and method signatures from the IL2CPP build, checks
 | `game_assemblies` | sorted `assemblies.game` from `unpack` |
 | `dump` | adapter info plus `assemblies: {name: {types, methods}}` for each game assembly |
 | `crosscheck` | `{types_match, assemblies, method_gap_classes}`, or `null` with `--skip-crosscheck`. `assemblies[name]` is `{types, methods, method_gaps}`, each value a `[dump, crosscheck]` pair; `method_gaps` lists only classes whose method counts differ. |
-| `java` | `{apk, exit_code, errors, java_files, ...}` from the decompiler, or `null` with `--skip-java` |
+| `java` | `{apk, exit_code, errors, java_files, ...}` from the java_decompiler, or `null` with `--skip-java` |
 | `code_hash`, `adapters` | always recorded by the CLI |
 
 ## What IL2CPP recovers, and what it cannot
@@ -36,7 +36,7 @@ Recovers the game's C# types and method signatures from the IL2CPP build, checks
 | `--abi` | `arm64-v8a` | which `libil2cpp.so` to dump |
 | `--force` | off | delete `il2cpp/<v>/` and `code/<v>/` and rerun every step |
 | `--skip-crosscheck` | off | do not run `il2cpp_crosscheck` |
-| `--skip-java` | off | do not run `decompiler` |
+| `--skip-java` | off | do not run `java_decompiler` |
 
 ## Failure modes
 - `RuntimeError` (exit code 2), and nothing is recorded:
@@ -46,7 +46,7 @@ Recovers the game's C# types and method signatures from the IL2CPP build, checks
   - type counts differ between the two dumpers for any game assembly. Read `crosscheck.json` to see where.
 - Recorded without failing:
   - method count differences per class (`method_gaps`);
-  - a non-zero decompiler exit code, as long as `sources/` exists.
+  - a non-zero java_decompiler exit code, as long as `sources/` exists.
 
 ## Tests
 - `tests/test_stage_code.py` runs `acquire`, `unpack` and `code` through `cli.main` with fake adapters on a synthetic APK. It covers `compare`, the recorded info, a type mismatch (exit 2 with `crosscheck.json` written), a missing game DLL, swapping the dump adapter through `zk.toml` alone, and running before `unpack`.

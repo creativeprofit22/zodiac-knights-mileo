@@ -1,8 +1,8 @@
-"""Fake decompiler adapter: writes sources/ and reports a non-zero exit like jadx often does."""
-PORT = "decompiler"
+"""Fake java_decompiler adapter: writes sources/ and reports a non-zero exit like jadx often does."""
+PORT = "java_decompiler"
 
 
-class FakeDecompiler:
+class FakeJavaDecompiler:
     def decompile(self, apk, out):
         (out / "sources").mkdir(parents=True, exist_ok=True)
         (out / "sources" / "A.java").write_text(f"// {apk.name}\n", encoding="utf-8")
@@ -10,4 +10,4 @@ class FakeDecompiler:
 
 
 def create(cfg):
-    return FakeDecompiler()
+    return FakeJavaDecompiler()

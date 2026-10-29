@@ -7,7 +7,7 @@ from zk.stages.code import compare
 def _config(tmp_path, dump="tests.fakes.fake_dump_a", extra_type=""):
     lines = ['workspace = "ws"', 'tools = "tools"', 'package = "com.zodiacknights.game"', "[adapters]",
              'device_source = "tests.fakes.fake_device"', f'il2cpp_dump = "{dump}"',
-             'il2cpp_crosscheck = "tests.fakes.fake_crosscheck"', 'decompiler = "tests.fakes.fake_decompiler"',
+             'il2cpp_crosscheck = "tests.fakes.fake_crosscheck"', 'java_decompiler = "tests.fakes.fake_java_decompiler"',
              "[options.il2cpp_crosscheck]", f'extra_type = "{extra_type}"']
     p = tmp_path / "zk.toml"
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -50,7 +50,7 @@ def test_code_stage_records_dump_crosscheck_and_java(tmp_path):
     assert c["dump"]["assemblies"]["ZodiacKnights.Game"] == {"types": 2, "methods": 4}
     assert c["crosscheck"]["types_match"] is True and c["crosscheck"]["method_gap_classes"] == 0
     assert c["java"] == {"apk": "base.apk", "exit_code": 1, "errors": ["ERROR - finished with errors, count: 1"]}
-    assert set(c["adapters"]) == {"il2cpp_dump", "il2cpp_crosscheck", "decompiler"}
+    assert set(c["adapters"]) == {"il2cpp_dump", "il2cpp_crosscheck", "java_decompiler"}
     out = tmp_path / "ws" / "il2cpp" / "0.4.6-17"
     assert (out / "crosscheck.json").is_file() and (out / "DummyDll" / "ZodiacKnights.Logic.dll").is_file()
     assert (tmp_path / "ws" / "code" / "0.4.6-17" / "sources" / "A.java").is_file()

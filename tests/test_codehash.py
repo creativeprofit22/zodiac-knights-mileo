@@ -32,3 +32,8 @@ def test_in_tree_keys_relative_to_src():
     import zk.cli
     src = stage_sources(("zk.cli", zk.cli.__file__))
     assert "zk/cli.py" in src and "zk/core/codehash.py" in src
+
+
+def test_shared_stage_helpers_are_hashed():
+    import zk.cli
+    assert "zk/stages/_unpack.py" in stage_sources(("zk.cli", zk.cli.__file__))

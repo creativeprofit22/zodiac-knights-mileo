@@ -1,4 +1,4 @@
-"""decompiler adapter over jadx, run on the pinned JDK 21.
+"""java_decompiler adapter over jadx, run on the pinned JDK 21.
 
 jadx exits non-zero when some methods fail to decompile; that is recorded, not fatal. Only a missing sources/ fails.
 """
@@ -10,9 +10,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 from zk.core import toolchain
-from zk.ports.decompiler import CONTRACT
+from zk.ports.java_decompiler import CONTRACT
 
-PORT = "decompiler"
+PORT = "java_decompiler"
 TOOL = "jadx"
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]

@@ -1,4 +1,4 @@
-"""Hash of the code that produced a stage result: stage + core/ports/formats + adapters used."""
+"""Hash of the code that produced a stage result: stage + stages/_*.py + core/ports/formats + adapters used."""
 from __future__ import annotations
 
 import hashlib
@@ -39,6 +39,9 @@ def stage_sources(stage: Source, adapters: Iterable[Source] = ()) -> dict[str, b
     roots = [(m, Path(f).resolve()) for m, f in [stage, *adapters]]
     roots = [(m, r.parent if r.name == "__init__.py" else r) for m, r in roots]
     roots += [(f"zk.{s}", (PKG / s).resolve()) for s in SHARED]
+    # shared stage helpers (stages/_*.py) feed every stage that may import them
+    roots += [(f"zk.stages.{f.stem}", f.resolve()) for f in sorted((PKG / "stages").glob("_*.py"))
+              if f.name != "__init__.py"]
     out: dict[str, bytes] = {}
     for module, root in roots:
         for f in _files(root):

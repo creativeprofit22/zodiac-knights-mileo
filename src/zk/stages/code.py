@@ -1,6 +1,6 @@
 """code: dump the IL2CPP binary, cross-check it with an independent dumper, and decompile the Java side.
 
-Outputs: il2cpp/<version>/ (il2cpp_dump), il2cpp/<version>/crosscheck/ + crosscheck.json, code/<version>/ (decompiler).
+Outputs: il2cpp/<version>/ (il2cpp_dump), il2cpp/<version>/crosscheck/ + crosscheck.json, code/<version>/ (java_decompiler).
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 
 from zk.ports import PORTS
+from zk.stages._unpack import unpack_inputs
 
 NAME = "code"
 HELP = "dump IL2CPP types/methods, cross-check them with a second dumper, and decompile the Java code"
@@ -19,7 +20,7 @@ def add_arguments(p: argparse.ArgumentParser) -> None:
     p.add_argument("--abi", default="arm64-v8a", help="which libil2cpp.so to dump (default: arm64-v8a)")
     p.add_argument("--force", action="store_true", help="delete earlier outputs and rerun every step")
     p.add_argument("--skip-crosscheck", action="store_true", help="do not run the il2cpp_crosscheck port")
-    p.add_argument("--skip-java", action="store_true", help="do not run the decompiler port")
+    p.add_argument("--skip-java", action="store_true", help="do not run the java_decompiler port")
 
 
 def _pair(a: int | None, b: int | None) -> list[int | None]:
@@ -50,28 +51,6 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _inputs(ctx, version: str, abi: str) -> tuple[Path, Path, list[str]]:
-    unpack = ctx.ws.manifest().get("unpack")
-    if not unpack or unpack.get("version") != version:
-        raise RuntimeError(f"no unpack record for {version}: run `zk unpack` first")
-    root = ctx.ws.dir("unpacked", version)
-    rel = (unpack.get("il2cpp") or {}).get(abi)
-    if not rel:
-        raise RuntimeError(f"unpack found no libil2cpp.so for ABI {abi!r} (have {unpack.get('abis')}): "
-                           "run `zk unpack` or pass --abi")
-    meta = (unpack.get("metadata") or {}).get("path")
-    if not meta:
-        raise RuntimeError("unpack found no global-metadata.dat: run `zk unpack`")
-    binary, metadata = root / rel, root / meta
-    for p in (binary, metadata):
-        if not p.is_file():
-            raise RuntimeError(f"{p} is missing: run `zk unpack --force`")
-    game = (unpack.get("assemblies") or {}).get("game")
-    if not game:
-        raise RuntimeError("unpack recorded no game assemblies (ScriptingAssemblies.json): run `zk unpack`")
-    return binary, metadata, list(game)
-
-
 def _check_game_assemblies(out: Path, summary: dict, game: list[str]) -> None:
     problems = []
     for name in sorted(game):
@@ -97,7 +76,7 @@ def _java_apk(ctx, version: str) -> Path:
 
 def execute(ctx, args: argparse.Namespace) -> dict:
     version = ctx.ws.current_version()
-    binary, metadata, game = _inputs(ctx, version, args.abi)
+    binary, metadata, game = unpack_inputs(ctx, version, args.abi)
     il2cpp = ctx.ws.dir("il2cpp", version)
     code = ctx.ws.dir("code", version)
     if args.force:
@@ -132,8 +111,8 @@ def execute(ctx, args: argparse.Namespace) -> dict:
 
     if not args.skip_java:
         apk = _java_apk(ctx, version)
-        print(f"[code] decompiler {apk.name} -> {code}")
-        java_info = ctx.adapter("decompiler").decompile(apk, code)
-        PORTS["decompiler"].contract.verify(code)
+        print(f"[code] java_decompiler {apk.name} -> {code}")
+        java_info = ctx.adapter("java_decompiler").decompile(apk, code)
+        PORTS["java_decompiler"].contract.verify(code)
         info["java"] = {"apk": apk.name, **java_info}
     return info

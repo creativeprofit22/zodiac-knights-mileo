@@ -7,7 +7,7 @@ import pytest
 from tests.test_csharp_dump import DUMP, EXPECTED, INSPECTOR
 from tests.test_il2cpp_script import _script
 from zk.adapters import il2cppdumper, il2cppinspector, jadx
-from zk.ports.decompiler import Decompiler
+from zk.ports.java_decompiler import JavaDecompiler
 from zk.ports.il2cpp_crosscheck import Il2CppCrosscheck
 from zk.ports.il2cpp_dump import Il2CppDump
 
@@ -54,7 +54,7 @@ def test_command_lines():
 def test_adapters_satisfy_their_ports(tmp_path):
     assert isinstance(il2cppdumper.Il2CppDumper(tmp_path), Il2CppDump)
     assert isinstance(il2cppinspector.Il2CppInspector(tmp_path), Il2CppCrosscheck)
-    assert isinstance(jadx.Jadx(tmp_path), Decompiler)
+    assert isinstance(jadx.Jadx(tmp_path), JavaDecompiler)
 
 
 def test_dumper_runs_without_stdin_and_writes_summary(tmp_path):

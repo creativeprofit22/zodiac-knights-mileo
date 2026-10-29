@@ -65,6 +65,19 @@ TOOLS: dict[str, Tool] = {t.name: t for t in (
          "Il2CppInspectorRedux.Legacy.CLI-win-x64.zip",
          "Il2CppInspectorRedux.Legacy.CLI-win-x64/Il2CppInspector.exe",
          sha256="f30788a94e938a96a8fcace95d22e766aed4eb721e46af2421ff399d218efd14"),
+    # MIT; self-contained single exe that builds stub assemblies from binary + metadata.
+    Tool("cpp2il", "2022.1.0-pre-release.21",
+         "https://github.com/SamboyCoding/Cpp2IL/releases/download/2022.1.0-pre-release.21/"
+         "Cpp2IL-2022.1.0-pre-release.21-Windows.exe",
+         "Cpp2IL.exe", kind="file",
+         sha256="663fb432433b4371fd1ee0ebc321a8fff2a9aac5ac4230c843f9e03ddee4e04c"),
+    # MIT; native AOT ilspycmd ships on NuGet, not as a GitHub asset (a .nupkg is a zip).
+    # sha256 computed from the download after it matched NuGet's published sha512.
+    Tool("ilspycmd", "11.2.0.10050",
+         "https://api.nuget.org/v3-flatcontainer/ilspycmd.win-x64/11.2.0.10050/"
+         "ilspycmd.win-x64.11.2.0.10050.nupkg",
+         "tools/any/win-x64/ilspycmd.exe",
+         sha256="b67478eb22fedff149c37e7dd4512d716c5e1dbe7425a591ae8cf8eb773da158"),
 )}
 
 

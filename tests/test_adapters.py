@@ -43,8 +43,8 @@ def test_missing_adapter_module(tmp_path):
 
 
 def test_adapter_for_wrong_port(tmp_path):
-    with pytest.raises(RuntimeError, match="implements port 'il2cpp_dump', not 'decompiler'"):
-        _ctx(tmp_path, decompiler="tests.fakes.fake_dump_a").adapter("decompiler")
+    with pytest.raises(RuntimeError, match="implements port 'il2cpp_dump', not 'java_decompiler'"):
+        _ctx(tmp_path, java_decompiler="tests.fakes.fake_dump_a").adapter("java_decompiler")
 
 
 def test_protocol_mismatch(tmp_path):

@@ -4,7 +4,7 @@ workspace/
   raw/<version>/       files pulled from the phone (APK, OBB, data)
   unpacked/<version>/  APK contents (zip extracted)
   il2cpp/<version>/    il2cpp_dump port output (dump.cs, script.json, DummyDll/)
-  code/<version>/      decompiler port output (Java sources)
+  code/<version>/      java_decompiler port output (Java sources)
   types/<version>/     type_info port output (il2cpp.h)
   ghidra/<version>/    ghidra port output (index.json, functions/)
   assets/<version>/    exported Unity assets
@@ -17,7 +17,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-STAGE_DIRS = ("raw", "unpacked", "il2cpp", "code", "types", "ghidra", "assets", "data")
+STAGE_DIRS = ("raw", "unpacked", "il2cpp", "code", "csharp", "types", "ghidra", "assets", "data")
 GAME = "game"  # manifest key holding facts about the game build (never hard-coded constants)
 
 
