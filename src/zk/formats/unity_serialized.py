@@ -34,3 +34,39 @@ def parse_header(head: bytes) -> SerializedHeader | None:
 
 def is_serialized_file(head: bytes) -> bool:
     return parse_header(head) is not None
+
+
+_IDENT = re.compile(rb"[A-Za-z_][\w.`<>+-]*")
+
+
+def _aligned_string(raw: bytes, at: int) -> tuple[str, int] | None:
+    """Unity aligned string at `at` (int32 length, bytes, pad to 4) -> (text, next offset)."""
+    if at + 4 > len(raw):
+        return None
+    (n,) = struct.unpack_from("<i", raw, at)
+    if n == 0:
+        return "", at + 4
+    end = at + 4 + n
+    if not 0 < n < 256 or end > len(raw) or not _IDENT.fullmatch(raw[at + 4:end]):
+        return None
+    return raw[at + 4:end].decode("ascii"), (end + 3) // 4 * 4
+
+
+def managed_reference_types(raw: bytes) -> list[tuple[str, str, str]]:
+    """Candidate (class, namespace, assembly) triples in an object's bytes.
+
+    A ManagedReferencesRegistry entry names its type inline as three aligned strings; with type trees disabled this
+    is the only place the names appear. Callers keep only triples that name a class the dump knows.
+    """
+    found: set[tuple[str, str, str]] = set()
+    for at in range(0, max(len(raw) - 3, 0), 4):
+        first = _aligned_string(raw, at)
+        if not first or not first[0]:
+            continue
+        second = _aligned_string(raw, first[1])
+        if second is None:
+            continue
+        third = _aligned_string(raw, second[1])
+        if third and third[0]:
+            found.add((first[0], second[0], third[0]))
+    return sorted(found)

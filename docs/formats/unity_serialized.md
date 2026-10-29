@@ -19,6 +19,7 @@ The version string must match `(\d{4}|\d)\.\d+\.\d+[a-z]\d+\0`, e.g. `6000.3.2f1
 HEAD_BYTES = 0x50
 def parse_header(head: bytes) -> SerializedHeader | None: ...  # (format, unity_version)
 def is_serialized_file(head: bytes) -> bool: ...
+def managed_reference_types(raw: bytes) -> list[tuple[str, str, str]]: ...  # (class, namespace, assembly)
 ```
 
 ## Evidence
@@ -31,3 +32,11 @@ In the 0.4.6-17 `globalgamemanagers`, the header starts with format 22 at 0x08, 
 - garbage input;
 - a short buffer;
 - an out-of-range format.
+
+## Managed references
+A `[SerializeReference]` field stores a `ManagedReferencesRegistry` at the end of the object. Each entry is `rid`
+(int64), then the type as three aligned strings (int32 length, ASCII, padded to 4): class, namespace, assembly; then
+the payload. With type trees disabled, the file's ref-type table carries no names, so `managed_reference_types` scans an
+object's bytes for such triples. It over-reports (any three identifier strings in a row); the assets stage keeps only
+triples naming a class the IL2CPP dump knows. On 0.4.6-17 this finds the 12 URP/Core settings classes in
+`UniversalRenderPipelineGlobalSettings`. Covered by `test_managed_reference_types_finds_inline_type_triples`.

@@ -21,7 +21,7 @@ Normalization rules, so the two tools compare:
 - Nested types are `Ns.Outer.Inner`. Il2CppDumper writes nested types as `Outer.Inner` with an empty namespace, often before the outer type, so the outer type's namespace is borrowed after the whole file is read.
 - In `dump.cs`, a type is a line with `// TypeDefIndex: N`. Its assembly comes from the image header ranges.
 - A method is a line with `(` directly inside a type body (constructors included). Fields and `/* GenericInstMethod */` blocks don't count.
-- Il2CppDumper lists property and event accessors (`get_X`, `add_X`) as methods; Il2CppInspector prints them as `get;`, `set;`, `add;`, `remove;` inside the property or event, so each of those counts as one method. They count only inside a property or event block (or a one-line `{ get; set; }`), so a field named `add` or `set` is not a method.
+- Il2CppDumper lists property and event accessors (`get_X`, `add_X`) as methods; Il2CppInspector prints them as `get;`, `set;`, `add;`, `remove;` inside the property or event, so each of those counts as one method. They count only inside a property or event block (or a one-line `{ get; set; }`), so a field named `add` or `set` is not a method. Indexers print accessors with bodies (`this[int i] { get => default; set {} }`); `get =>` and `set {` count too.
 - `types` counts declarations, not distinct names, so a name clash cannot hide a type.
 - An Inspector `delegate` line counts as a type with 0 methods. Il2CppDumper prints delegates as classes with their `Invoke` methods, so this shows up as a method gap, not a type gap.
 - Keys are sorted.

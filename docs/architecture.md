@@ -1,6 +1,6 @@
 # Architecture
 
-`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md); `il2cpp_dump` v2 and `il2cpp_crosscheck` in [ADR 0003](adr/0003-il2cpp-dump-v2.md); `decompiler` v2, `java_decompiler` and `il2cpp_assemblies` in [ADR 0004](adr/0004-decompiler-v2.md); `ghidra` v2 in [ADR 0005](adr/0005-ghidra-v2.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
+`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md); `il2cpp_dump` v2 and `il2cpp_crosscheck` in [ADR 0003](adr/0003-il2cpp-dump-v2.md); `decompiler` v2, `java_decompiler` and `il2cpp_assemblies` in [ADR 0004](adr/0004-decompiler-v2.md); `ghidra` v2 in [ADR 0005](adr/0005-ghidra-v2.md); `type_info` v2 in [ADR 0006](adr/0006-type-info-v2.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
 
 ## Layout
 
@@ -30,9 +30,10 @@ device ─device_source (acquire)─▶ raw/<v>/apk/base.apk ─unpack─▶ unp
    raw apk  ─java_decompiler───▶ code/<v>/              (sources/)                                              ┘
    unpacked ─il2cpp_assemblies─▶ csharp/<v>/assemblies/ ┐                     (or il2cpp/<v>/DummyDll/ with --input dummydll)
    assemblies ─decompiler──────▶ csharp/<v>/            ┴ zk csharp            (projects/<Asm>/, report.json, README.md)
-   il2cpp   ─type_info───▶ types/<v>/    (il2cpp.h)
+   il2cpp + MonoBehaviour classes ─type_info──▶ types/<v>/ (nodes.json)
    lib + il2cpp ─ghidra──▶ ghidra/<v>/   (project/, functions/<Ns>/<Class>.c, index.json)  zk ghidra
-   formats parse raw/unpacked bytes ──▶ assets/<v>/, data/<v>/
+   unpacked Data + types ─(UnityPy)──▶ assets/<v>/ (PNG, WAV, fonts, text, shaders.json, MonoBehaviour JSON, scenes)  zk assets
+   formats parse raw/unpacked bytes ──▶ data/<v>/
 ```
 
 Workspace areas (`zk.core.workspace.STAGE_DIRS`): `raw`, `unpacked`, `il2cpp`, `code`, `csharp`, `types`, `ghidra`, `assets`, `data`. Each one is created on demand as `workspace/<area>/<version>/`.

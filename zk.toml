@@ -12,7 +12,7 @@ il2cpp_crosscheck = "il2cppinspector"
 java_decompiler = "jadx"
 il2cpp_assemblies = "cpp2il"
 decompiler = "ilspycmd"
-# type_info = "..."
+type_info = "typetree_dummydll"   # typetree_cpp2il: see docs/ports/type_info.md
 ghidra = "ghidra"
 
 # Adapter settings, one table per port. The folder device_source imports an APK or a pulled folder:

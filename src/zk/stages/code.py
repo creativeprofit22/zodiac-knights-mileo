@@ -11,6 +11,7 @@ from pathlib import Path
 
 from zk.ports import PORTS
 from zk.stages._unpack import unpack_inputs
+from zk.stages.assets._compare import compare
 
 NAME = "code"
 HELP = "dump IL2CPP types/methods, cross-check them with a second dumper, and decompile the Java code"
@@ -21,30 +22,6 @@ def add_arguments(p: argparse.ArgumentParser) -> None:
     p.add_argument("--force", action="store_true", help="delete earlier outputs and rerun every step")
     p.add_argument("--skip-crosscheck", action="store_true", help="do not run the il2cpp_crosscheck port")
     p.add_argument("--skip-java", action="store_true", help="do not run the java_decompiler port")
-
-
-def _pair(a: int | None, b: int | None) -> list[int | None]:
-    return [a, b]
-
-
-def compare(a: dict, b: dict, assemblies: list[str]) -> dict:
-    """Compare two summary.json documents for the given assemblies; a missing side counts as None."""
-    report: dict[str, dict] = {}
-    mismatches: list[str] = []
-    for name in sorted(assemblies):
-        sa = a.get("assemblies", {}).get(name)
-        sb = b.get("assemblies", {}).get(name)
-        ca = sa["classes"] if sa else {}
-        cb = sb["classes"] if sb else {}
-        gaps = {cls: _pair(ca.get(cls), cb.get(cls)) for cls in sorted(set(ca) | set(cb))
-                if ca.get(cls) != cb.get(cls)}
-        types = _pair(sa["types"] if sa else None, sb["types"] if sb else None)
-        if types[0] != types[1]:
-            mismatches.append(name)
-        report[name] = {"types": types, "methods": _pair(sa["methods"] if sa else None,
-                                                         sb["methods"] if sb else None),
-                        "method_gaps": gaps}
-    return {"assemblies": report, "type_mismatches": mismatches, "types_match": not mismatches}
 
 
 def _read_json(path: Path) -> dict:

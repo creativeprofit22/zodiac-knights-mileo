@@ -74,3 +74,18 @@ def test_scripting_assemblies_game_filter():
 def test_scripting_assemblies_rejects_bad_shape(doc):
     with pytest.raises(ValueError):
         scripting_assemblies.parse(json.dumps(doc))
+
+
+def test_managed_reference_types_finds_inline_type_triples():
+    import struct
+
+    from zk.formats.unity_serialized import managed_reference_types
+
+    def s(text):
+        b = text.encode()
+        return struct.pack("<i", len(b)) + b + b"\0" * (-len(b) % 4)
+    raw = (struct.pack("<q", 5) + s("Foo") + s("My.Ns") + s("My.Asm") + b"\x01\x00\x00\x00"
+           + struct.pack("<q", 6) + s("Bar") + s("") + s("Asm2"))
+    found = managed_reference_types(raw)
+    assert ("Foo", "My.Ns", "My.Asm") in found and ("Bar", "", "Asm2") in found
+    assert managed_reference_types(b"\xff" * 16) == []

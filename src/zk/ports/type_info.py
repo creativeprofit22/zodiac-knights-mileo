@@ -1,6 +1,6 @@
-"""type_info port (contract v1): Produces C type definitions for the IL2CPP types.
+"""type_info port (contract v2, ADR 0006): type-tree nodes for MonoBehaviour script classes.
 
-The adapter writes into `out`/`dest` and returns info for the manifest; CONTRACT lists what it must leave there.
+The adapter writes nodes.json into `out` and returns info for the manifest.
 Changing this contract needs a new ADR.
 """
 from __future__ import annotations
@@ -11,9 +11,10 @@ from typing import Protocol, runtime_checkable
 from zk.core.contracts import ArtifactContract
 
 PORT = "type_info"
-CONTRACT = ArtifactContract(PORT, files=("il2cpp.h",))
+CONTRACT = ArtifactContract(PORT, files=("nodes.json",))
 
 
 @runtime_checkable
 class TypeInfo(Protocol):
-    def types(self, dump_dir: Path, out: Path) -> dict: ...
+    def types(self, binary: Path, metadata: Path, dump_dir: Path, unity_version: str,
+              classes: Path, out: Path) -> dict: ...

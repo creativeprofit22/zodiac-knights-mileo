@@ -197,3 +197,19 @@ namespace ZK
 """
     s = csharp_dump.summarize_inspector({"Game.cs": text})
     assert s["assemblies"]["Game"]["classes"] == {"ZK.Box": 4}
+
+
+def test_inspector_indexer_accessors_with_bodies_count_as_methods():
+    text = """\
+namespace ZK
+{
+\tpublic class Bits // TypeDefIndex: 0
+\t{
+\t\tpublic bool this[int index] { get => default; set {} } // 0x1-0x2
+\t\tpublic int this[string key] { get => default; } // 0x3-0x4
+\t\tpublic int Size { get; } // 0x5-0x6
+\t}
+}
+"""
+    s = csharp_dump.summarize_inspector({"Game.cs": text})
+    assert s["assemblies"]["Game"]["classes"] == {"ZK.Bits": 4}

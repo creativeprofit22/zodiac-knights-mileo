@@ -18,7 +18,8 @@ _NAMESPACE_BLOCK = re.compile(r"^namespace\s+([\w.]+)")
 _KIND = re.compile(r"(?:^|\s)(class|struct|interface|enum|record)\s+(.*)$")
 _DELEGATE = re.compile(r"(?:^|\s)delegate\s+(.*)$")
 _MANGLE = re.compile(r"[^\w.`]")
-_ACCESSOR = re.compile(r"\b(?:get|set|init|add|remove)\s*;")
+# Il2CppInspector writes indexer accessors with bodies: `this[int i] { get => default; set {} }`
+_ACCESSOR = re.compile(r"\b(?:get|set|init|add|remove)\s*(?:;|=>|\{)")
 MODULE = "<Module>"
 _STRING = re.compile(r'@?"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
 
