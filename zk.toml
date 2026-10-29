@@ -13,9 +13,14 @@ java_decompiler = "jadx"
 il2cpp_assemblies = "cpp2il"
 decompiler = "ilspycmd"
 # type_info = "..."
-# ghidra = "ghidra"
+ghidra = "ghidra"
 
 # Adapter settings, one table per port. The folder device_source imports an APK or a pulled folder:
 # [options.device_source]
 # path = "raw/0.4.6-17"     # a .apk file or a folder with apk/ (or *.apk), obb/, data/
 # version = "0.4.6-17"      # label the folder has no device to ask for
+
+# Headless Ghidra: heap and per-function decompiler timeout (default 30 s; slow functions need more).
+[options.ghidra]
+maxmem = "12G"
+decompile_timeout = "300"

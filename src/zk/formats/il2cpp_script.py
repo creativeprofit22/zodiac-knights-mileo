@@ -1,6 +1,7 @@
 """Schema check for Il2CppDumper's script.json (the Ghidra/IDA import file). Pure: parsed JSON in, counts out."""
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 # key -> (required fields, optional fields); every Address-like field is an int, the rest str
@@ -69,3 +70,69 @@ def validate(data: object) -> ScriptSummary:
             raise ValueError(f"$.{ADDRESSES}[{i}]: expected int, got {type(a).__name__}")
     return ScriptSummary(counts["ScriptMethod"], counts["ScriptString"], counts["ScriptMetadata"],
                          counts["ScriptMetadataMethod"], len(addrs))
+
+
+TYPE_INFO = "_TypeInfo"
+
+
+def strip_generics(name: str) -> str:
+    """Drop generic argument lists (`List<Hero>` -> `List`) but keep compiler-generated names (`<Run>d__5`)."""
+    out: list[str] = []
+    depth = 0
+    for i, ch in enumerate(name):
+        if depth:
+            depth += {"<": 1, ">": -1}.get(ch, 0)
+        elif ch == "<" and i > 0 and name[i - 1] not in ".<":
+            depth = 1
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _segments(name: str) -> list[str]:
+    """Split on dots outside angle brackets (`<A.B>c` stays one segment)."""
+    segs: list[str] = []
+    cur: list[str] = []
+    depth = 0
+    for ch in name:
+        if ch == "." and depth == 0:
+            segs.append("".join(cur))
+            cur = []
+            continue
+        depth += {"<": 1, ">": -1}.get(ch, 0)
+        cur.append(ch)
+    segs.append("".join(cur))
+    return segs
+
+
+def _owner(method_name: str) -> str:
+    return strip_generics(method_name.split("$$", 1)[0])
+
+
+def type_owners(data: Mapping[str, object]) -> frozenset[str]:
+    """Every type name that owns a method or has a TypeInfo, generics stripped; array types skipped."""
+    owners: set[str] = set()
+    methods = data.get("ScriptMethod", [])
+    metadata = data.get("ScriptMetadata", [])
+    for entry in methods if isinstance(methods, list) else []:
+        if isinstance(entry, dict) and isinstance(name := entry.get("Name"), str) and "$$" in name:
+            owners.add(_owner(name))
+    for entry in metadata if isinstance(metadata, list) else []:
+        if isinstance(entry, dict) and isinstance(name := entry.get("Name"), str) and name.endswith(TYPE_INFO):
+            base = name[: -len(TYPE_INFO)]
+            if base and "[]" not in base:
+                owners.add(strip_generics(base))
+    owners.discard("")
+    return frozenset(owners)
+
+
+def resolve_class(method_name: str, owners: frozenset[str]) -> tuple[str, str] | None:
+    """(namespace, top-level class) of a `Type$$Method` name: the shortest owner prefix, since namespaces own
+    no methods and nested/compiler-generated types belong to their outermost class."""
+    if "$$" not in method_name:
+        return None
+    segs = _segments(_owner(method_name))
+    for i in range(1, len(segs) + 1):
+        if ".".join(segs[:i]) in owners:
+            return ".".join(segs[: i - 1]), segs[i - 1]
+    return None

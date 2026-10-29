@@ -18,6 +18,9 @@ zk = "zk.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"zk.adapters.ghidra" = ["scripts/*.java"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]

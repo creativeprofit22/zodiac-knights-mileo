@@ -37,3 +37,15 @@ def test_in_tree_keys_relative_to_src():
 def test_shared_stage_helpers_are_hashed():
     import zk.cli
     assert "zk/stages/_unpack.py" in stage_sources(("zk.cli", zk.cli.__file__))
+
+
+def test_java_scripts_in_package_change_the_hash(tmp_path):
+    mod, pkg = _copy(tmp_path)
+    (pkg.parent / "scripts").mkdir()
+    script = pkg.parent / "scripts" / "Export.java"
+    script.write_text("class Export {}\n", encoding="utf-8")
+    src = stage_sources(("ext.stage", mod), [("ext.pkg", pkg)])
+    assert "ext/pkg/scripts/Export.java" in src
+    before = code_hash(src)
+    script.write_text("class Export { int x; }\n", encoding="utf-8")
+    assert code_hash(stage_sources(("ext.stage", mod), [("ext.pkg", pkg)])) != before

@@ -37,17 +37,23 @@ TOOLS: dict[str, Tool] = {t.name: t for t in (
          "https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar",
          "apktool.jar", kind="file",
          sha256="dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423"),
-    # Ghidra 12 needs JDK 21; portable Temurin, only ever used via JAVA_HOME for Ghidra.
+    # jadx runs on JDK 21; portable Temurin, only ever used via JAVA_HOME (java_env).
     Tool("jdk21", "21.0.12.1+1",
          "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/"
          "OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
          "jdk-21.0.12.1+1/bin/java.exe",
          sha256="f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e"),
-    Tool("ghidra", "12.1.4",
-         "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.4_build/"
-         "ghidra_12.1.4_PUBLIC_20260921.zip",
-         "ghidra_12.1.4_PUBLIC/support/analyzeHeadless.bat",
-         sha256="ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"),
+    # Ghidra 12.2 needs JDK 25 (GettingStarted.md); portable Temurin, only ever used via JAVA_HOME for Ghidra.
+    Tool("jdk25", "25.0.5+8",
+         "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/"
+         "OpenJDK25U-jdk_x64_windows_hotspot_25.0.5_8.zip",
+         "jdk-25.0.5+8/bin/java.exe",
+         sha256="636bdc13dc649ddc7d5921c5c7d23cca6e44fd19d662b45cc9c02135a6c96c42"),
+    Tool("ghidra", "12.2",
+         "https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.2_build/"
+         "ghidra_12.2_PUBLIC_20261016.zip",
+         "ghidra_12.2_PUBLIC/support/analyzeHeadless.bat",
+         sha256="2c2cd776db3c1f6a097ba418922378ac3649cadd5e844a6f5f088ae628a7be67"),
     # Il2CppDumper and Il2CppInspector need .NET 10; portable runtime, only ever used via DOTNET_ROOT.
     # Not a GitHub asset: sha256 computed from the download after it matched Microsoft's published sha512.
     Tool("dotnet10", "10.0.14",

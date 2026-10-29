@@ -6,7 +6,7 @@ workspace/
   il2cpp/<version>/    il2cpp_dump port output (dump.cs, script.json, DummyDll/)
   code/<version>/      java_decompiler port output (Java sources)
   types/<version>/     type_info port output (il2cpp.h)
-  ghidra/<version>/    ghidra port output (index.json, functions/)
+  ghidra/<version>/    ghidra port output (index.json, functions/, project/)
   assets/<version>/    exported Unity assets
   data/<version>/      decoded game tables
   manifest.json        "game" facts + what each stage produced (stage -> info)

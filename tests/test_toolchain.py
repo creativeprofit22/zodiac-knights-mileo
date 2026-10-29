@@ -63,3 +63,13 @@ def test_dotnet_env_points_at_portable_runtime(tmp_path):
     exe.write_bytes(b"")
     env = dotnet_env(tmp_path)
     assert env["DOTNET_ROOT"] == str(exe.parent) and env["DOTNET_MULTILEVEL_LOOKUP"] == "0"
+
+
+def test_ghidra_pinned_to_12_2_on_jdk25():
+    from zk.core.toolchain import TOOLS
+    ghidra, jdk = TOOLS["ghidra"], TOOLS["jdk25"]
+    assert ghidra.version == "12.2"
+    assert ghidra.sha256 == "2c2cd776db3c1f6a097ba418922378ac3649cadd5e844a6f5f088ae628a7be67"
+    assert ghidra.entry == "ghidra_12.2_PUBLIC/support/analyzeHeadless.bat"
+    assert jdk.version.startswith("25.") and jdk.sha256 and len(jdk.sha256) == 64
+    assert jdk.entry.endswith("bin/java.exe")

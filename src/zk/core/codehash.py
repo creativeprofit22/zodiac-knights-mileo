@@ -7,6 +7,7 @@ from pathlib import Path
 
 PKG = Path(__file__).resolve().parents[1]  # src/zk
 SHARED = ("core", "ports", "formats")
+HASHED = (".py", ".java")
 
 
 def code_hash(sources: Mapping[str, bytes]) -> str:
@@ -19,7 +20,9 @@ def code_hash(sources: Mapping[str, bytes]) -> str:
 
 def _files(path: Path) -> list[Path]:
     if path.is_dir():
-        return sorted(p for p in path.rglob("*.py") if "__pycache__" not in p.parts)
+        # adapters may ship tool scripts (Ghidra .java) that change their output as much as the Python does
+        return sorted(p for p in path.rglob("*") if p.suffix in HASHED and p.is_file()
+                      and "__pycache__" not in p.parts)
     return [path]
 
 
