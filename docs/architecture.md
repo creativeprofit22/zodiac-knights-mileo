@@ -1,6 +1,6 @@
 # Architecture
 
-`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
+`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
 
 ## Layout
 
@@ -24,7 +24,7 @@ src/zk/
 ## Data flow
 
 ```
-device ─device_source─▶ raw/<v>/base.apk ─unpack─▶ unpacked/<v>/
+device ─device_source (acquire)─▶ raw/<v>/apk/base.apk ─unpack─▶ unpacked/<v>/<stem>/
    unpacked ─il2cpp_dump─▶ il2cpp/<v>/   (dump.cs, script.json, DummyDll/)
    unpacked ─decompiler──▶ code/<v>/     (sources/)
    il2cpp   ─type_info───▶ types/<v>/    (il2cpp.h)
@@ -40,7 +40,8 @@ Workspace areas (`zk.core.workspace.STAGE_DIRS`): `raw`, `unpacked`, `il2cpp`, `
 
 ```json
 {
-  "game": {"version": "0.4.6-17", "unity_version": "...", "metadata_version": 39},
+  "game": {"version": "0.4.6-17", "package": "com.zodiacknights.game", "unity_version": "6000.3.2f1",
+           "metadata_version": 39, "backend": "il2cpp", "abis": ["arm64-v8a", "armeabi-v7a", "x86_64"]},
   "<stage>": {"...": "stage info", "code_hash": "<sha256>",
               "adapters": {"<port>": {"adapter": "<zk.toml value>", "module": "<module>"}}}
 }
@@ -62,7 +63,9 @@ An adapter module exposes `PORT = "<port>"` and `create(cfg)`. `ctx.adapter(port
 
 Without `--config`, `zk` reads `zk.toml` at the repo root in a source checkout (a folder with `pyproject.toml` and `src/zk/`), or `./zk.toml` in the current folder when installed; `workspace/` and `tools/` default next to it.
 
-`Config.load` rejects unknown top-level keys and unknown port names in `[adapters]` with a `RuntimeError` listing the valid ones.
+Adapter settings go in `[options.<port>]` tables of strings (e.g. `[options.device_source] path`, `version` for the `folder` adapter), exposed as `cfg.options[port]`.
+
+`Config.load` rejects unknown top-level keys and unknown port names in `[adapters]` and `[options]` with a `RuntimeError` listing the valid ones.
 
 ## Dependency rule
 
@@ -80,5 +83,5 @@ Stages depend only on port Protocols and artifact contracts, never on a concrete
 
 - **a stage**: create `zk/stages/<name>.py` with a unique `NAME` (not `game`, `status` or `tools`; `zk` exits 2 otherwise), `HELP`, optional `add_arguments(parser)` and `execute(ctx, args) -> dict`. Append it to `STAGE_MODULES`. Get tools via `ctx.adapter("<port>")`, then call `PORTS["<port>"].contract.verify(out)`. Add a page from `docs/stages/_template.md`.
 - **an adapter**: create `zk/adapters/<tool>.py` (or a package) with `PORT` and `create(cfg)`. Fetch the tool via `zk.core.toolchain.path_of`, and add its `TOOLS` entry. Every entry must carry a `sha256` of the downloaded file; `fetch` refuses to download a tool without one. Set it in `zk.toml`. Its output must satisfy the port's `CONTRACT`.
-- **a port**: create `zk/ports/<port>.py` with `PORT`, the Protocol and `CONTRACT`. Register it in `PORTS` and add a page from `docs/ports/_template.md`. Port contracts are v1, and changing one needs a new ADR.
+- **a port**: create `zk/ports/<port>.py` with `PORT`, the Protocol and `CONTRACT`. Register it in `PORTS` and add a page from `docs/ports/_template.md`. Changing a port contract needs a new ADR (as `device_source` v2 did in ADR 0002).
 - **a format**: create `zk/formats/<format>.py` as a pure function over bytes or paths, with no tools and no workspace. Test it with synthetic bytes and add a page from `docs/formats/_template.md`.
