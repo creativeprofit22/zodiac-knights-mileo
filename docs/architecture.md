@@ -1,6 +1,6 @@
 # Architecture
 
-`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
+`zk` is a **stage pipeline with ports at the external-tool boundaries** ([ADR 0001](adr/0001-pipeline-with-ports.md); `device_source` contract v2 in [ADR 0002](adr/0002-device-source-v2.md); `il2cpp_dump` v2 and `il2cpp_crosscheck` in [ADR 0003](adr/0003-il2cpp-dump-v2.md)). Each stage reads workspace folders and writes its own. Any third-party tool (adb, an IL2CPP dumper, jadx, Ghidra…) is reached through a port, and `zk.toml` picks the adapter for each port.
 
 ## Layout
 
@@ -25,8 +25,9 @@ src/zk/
 
 ```
 device ─device_source (acquire)─▶ raw/<v>/apk/base.apk ─unpack─▶ unpacked/<v>/<stem>/
-   unpacked ─il2cpp_dump─▶ il2cpp/<v>/   (dump.cs, script.json, DummyDll/)
-   unpacked ─decompiler──▶ code/<v>/     (sources/)
+   unpacked ─il2cpp_dump───────▶ il2cpp/<v>/            (dump.cs, script.json, il2cpp.h, summary.json, DummyDll/)  ┐
+   unpacked ─il2cpp_crosscheck─▶ il2cpp/<v>/crosscheck/ (summary.json) → crosscheck.json                        ├ zk code
+   raw apk  ─decompiler────────▶ code/<v>/              (sources/)                                              ┘
    il2cpp   ─type_info───▶ types/<v>/    (il2cpp.h)
    lib + il2cpp ─ghidra──▶ ghidra/<v>/   (index.json, functions/)
    formats parse raw/unpacked bytes ──▶ assets/<v>/, data/<v>/

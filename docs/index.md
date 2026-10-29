@@ -3,10 +3,10 @@
 `zk` is a reverse-engineering pipeline for Zodiac Knights (Android, Unity/IL2CPP). It runs stages over a workspace, and every external tool sits behind a port.
 
 - [Architecture](architecture.md): layout, data flow, workspace, manifest, adapters, dependency rule
-- Decisions: [ADR 0001: pipeline with ports](adr/0001-pipeline-with-ports.md), [ADR 0002: device_source v2](adr/0002-device-source-v2.md)
-- Ports: [device_source](ports/device_source.md) (v2), [il2cpp_dump](ports/il2cpp_dump.md), [decompiler](ports/decompiler.md), [type_info](ports/type_info.md), [ghidra](ports/ghidra.md)
-- Stages: [acquire](stages/acquire.md), [unpack](stages/unpack.md). New stages start from the [stage template](stages/_template.md).
-- Formats: [il2cpp_metadata](formats/il2cpp_metadata.md), [unity_serialized](formats/unity_serialized.md), [scripting_assemblies](formats/scripting_assemblies.md). New parsers start from the [format template](formats/_template.md).
+- Decisions: [ADR 0001: pipeline with ports](adr/0001-pipeline-with-ports.md), [ADR 0002: device_source v2](adr/0002-device-source-v2.md), [ADR 0003: il2cpp_dump v2 + il2cpp_crosscheck](adr/0003-il2cpp-dump-v2.md)
+- Ports: [device_source](ports/device_source.md) (v2), [il2cpp_dump](ports/il2cpp_dump.md) (v2), [il2cpp_crosscheck](ports/il2cpp_crosscheck.md), [decompiler](ports/decompiler.md), [type_info](ports/type_info.md), [ghidra](ports/ghidra.md)
+- Stages: [acquire](stages/acquire.md), [unpack](stages/unpack.md), [code](stages/code.md). New stages start from the [stage template](stages/_template.md).
+- Formats: [il2cpp_metadata](formats/il2cpp_metadata.md), [unity_serialized](formats/unity_serialized.md), [scripting_assemblies](formats/scripting_assemblies.md), [il2cpp_script](formats/il2cpp_script.md), [csharp_dump](formats/csharp_dump.md). New parsers start from the [format template](formats/_template.md).
 - New port: start from the [port template](ports/_template.md).
 
 ## Quick start

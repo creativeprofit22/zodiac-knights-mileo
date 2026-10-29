@@ -48,6 +48,23 @@ TOOLS: dict[str, Tool] = {t.name: t for t in (
          "ghidra_12.1.4_PUBLIC_20260921.zip",
          "ghidra_12.1.4_PUBLIC/support/analyzeHeadless.bat",
          sha256="ddac49f903da9d5bac833e5cc79395098b9c33cfd3279be5f31bd00387d2d4db"),
+    # Il2CppDumper and Il2CppInspector need .NET 10; portable runtime, only ever used via DOTNET_ROOT.
+    # Not a GitHub asset: sha256 computed from the download after it matched Microsoft's published sha512.
+    Tool("dotnet10", "10.0.14",
+         "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.14/dotnet-runtime-10.0.14-win-x64.zip",
+         "dotnet.exe",
+         sha256="d861ab80f232adf3bdce83293bc1fa92868400330c477bf854d8558eb91c7ca6"),
+    Tool("il2cppdumper", "3.2.1",
+         "https://github.com/AndnixSH/Il2CppDumper/releases/download/3.2.1/Il2CppDumper-3.2.1-win-x64.zip",
+         "Il2CppDumper-3.2.1-win-x64/Il2CppDumper.exe",
+         sha256="ff970e9fa3da75aaa37157c7ac669a6c022500a4c3903c966ba17a7b890160ce"),
+    # AGPL-3.0: downloaded and run as an external program only, never vendored or linked.
+    # The Legacy CLI is the command-line tool; the new Redux CLI is a web UI that needs ASP.NET.
+    Tool("il2cppinspector", "2026.2",
+         "https://github.com/LukeFZ/Il2CppInspectorRedux/releases/download/2026.2/"
+         "Il2CppInspectorRedux.Legacy.CLI-win-x64.zip",
+         "Il2CppInspectorRedux.Legacy.CLI-win-x64/Il2CppInspector.exe",
+         sha256="f30788a94e938a96a8fcace95d22e766aed4eb721e46af2421ff399d218efd14"),
 )}
 
 
@@ -84,6 +101,18 @@ def fetch(tool: Tool, tools_dir: Path) -> Path:
 
 def path_of(name: str, tools_dir: Path) -> Path:
     return fetch(TOOLS[name], tools_dir)
+
+
+def dotnet_env(tools_dir: Path) -> dict[str, str]:
+    """Environment that runs .NET 10 apps on the portable runtime, ignoring any system install."""
+    root = path_of("dotnet10", tools_dir).parent
+    return {**os.environ, "DOTNET_ROOT": str(root), "DOTNET_MULTILEVEL_LOOKUP": "0"}
+
+
+def java_env(tools_dir: Path) -> dict[str, str]:
+    """Environment that runs Java tools on the pinned JDK 21, ignoring any system Java."""
+    home = path_of("jdk21", tools_dir).parents[1]
+    return {**os.environ, "JAVA_HOME": str(home)}
 
 
 def adb() -> str:

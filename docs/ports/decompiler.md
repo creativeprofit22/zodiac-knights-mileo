@@ -18,4 +18,7 @@ class Decompiler(Protocol):
 ## Adapters
 | name (`zk.toml` value) | tool | status |
 |---|---|---|
-| none yet | | added by its adapter phase |
+| `jadx` | jadx 1.5.6 (`-ds <out>/sources --no-res`) | default |
+
+## Notes
+- A non-zero jadx exit is common on obfuscated code. It is recorded (`exit_code`, last `errors`), and the run fails only when `sources/` is missing.

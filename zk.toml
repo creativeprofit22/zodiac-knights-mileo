@@ -7,8 +7,9 @@ package = "com.zodiacknights.game"
 # Each port stays unconfigured until its adapter phase lands.
 [adapters]
 device_source = "adb"
-# il2cpp_dump = "..."
-# decompiler = "jadx"
+il2cpp_dump = "il2cppdumper"
+il2cpp_crosscheck = "il2cppinspector"
+decompiler = "jadx"
 # type_info = "..."
 # ghidra = "ghidra"
 

@@ -46,3 +46,20 @@ def test_fetch_refuses_unpinned_tool(tmp_path):
     with pytest.raises(RuntimeError, match="no sha256"):
         fetch(_tool(src, None), tools)
     assert not tools.exists() or not any(tools.rglob("*"))
+
+
+def test_code_stage_tools_are_pinned():
+    from zk.core.toolchain import TOOLS
+    for name in ("dotnet10", "il2cppdumper", "il2cppinspector", "jadx"):
+        tool = TOOLS[name]
+        assert tool.sha256 and len(tool.sha256) == 64 and tool.url.startswith("https://")
+        assert tool.entry.endswith((".exe", ".bat"))
+
+
+def test_dotnet_env_points_at_portable_runtime(tmp_path):
+    from zk.core.toolchain import TOOLS, dotnet_env
+    exe = TOOLS["dotnet10"].home(tmp_path) / "dotnet.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"")
+    env = dotnet_env(tmp_path)
+    assert env["DOTNET_ROOT"] == str(exe.parent) and env["DOTNET_MULTILEVEL_LOOKUP"] == "0"
