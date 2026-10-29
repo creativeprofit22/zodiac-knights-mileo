@@ -201,7 +201,7 @@ def execute(ctx, args: argparse.Namespace) -> dict:
                            "error": e["error"] if e else "not exported yet"})
 
     used: dict[str, set[str]] = {}
-    for a, c in classes:
+    for a, c in [*classes, *ref_classes]:
         if a not in game:
             used.setdefault(a, set()).add(c)
     crosscheck = tag_used(compare(summary, _read_json(cc_path), used), used, _known.CROSSCHECK_RULES)

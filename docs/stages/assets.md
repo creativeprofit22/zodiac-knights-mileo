@@ -32,7 +32,7 @@ Export every asset in `assets/bin/Data`. Textures and sprites become PNG, audio 
 - `exported` counts per type, and `misses` naming each object that wasn't exported, with its error.
 - `monobehaviours`: `total`, `json`, `failed`, `by_reason`, and `failures`, each with its script class, assembly, reason, error, raw file and explanation.
 - `assembly_resolution`: MonoScripts whose assembly doesn't define the class, re-pointed to the one dump assembly that does (e.g. `UnityEngine|UnityEngine.GUISkin` → `UnityEngine.IMGUIModule`).
-- `crosscheck`, per non-game assembly used by a MonoBehaviour: dump vs crosscheck type and method counts. Each differing class is tagged `used`/`rule`, with the type-count residual and the `unexplained` list.
+- `crosscheck`, per non-game assembly used by a MonoBehaviour or one of its [SerializeReference] payloads: dump vs crosscheck type and method counts. Each differing class is tagged `used`/`rule`, with the type-count residual and the `unexplained` list.
 - `scenes` and `type_info` (adapter info, including `string_array_fixes`).
 
 Manifest record: version, unity_version, inventory, exported, misses, monobehaviours, scenes, type_info, exported_this_run.

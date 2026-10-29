@@ -141,3 +141,26 @@ def test_managed_references_are_requested_and_passed_to_the_reader(tmp_path, loa
     assert holder.refs == {("Battle", "ZK", "ZodiacKnights.Game"): [
         {"m_Type": "ZK.Battle", "m_Name": "Base", "m_Level": 0, "m_MetaFlag": 0}]}
     assert _manifest(tmp_path)["assets"]["type_info"]["unity_version"] == "7777.1.2f3"
+
+
+def test_reference_payload_classes_count_as_used_in_the_crosscheck(tmp_path, load):
+    import struct
+
+    def s(text):
+        b = text.encode()
+        return struct.pack("<i", len(b)) + b + bytes(-len(b) % 4)
+    holder = fu.mono(61, GOOD)
+    holder.raw_bytes = struct.pack("<q", 1) + s("Load") + s("Pay") + s("Unity.Payloads")
+    load["objects"] = _objects([holder])
+    cfg = _coded(tmp_path)
+    il2cpp = next((tmp_path / "ws" / "il2cpp").iterdir())
+    for path, methods in ((il2cpp / "summary.json", 2), (il2cpp / "crosscheck" / "summary.json", 3)):
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc["assemblies"]["Unity.Payloads"] = {"types": 1, "methods": methods, "classes": {"Pay.Load": methods}}
+        path.write_text(json.dumps(doc), encoding="utf-8")
+    assert cli.main(["--config", str(cfg), "assets"]) == 2
+    assert "assets" not in _manifest(tmp_path)
+    cc = _report(tmp_path)["crosscheck"]
+    asm = cc["assemblies"]["Unity.Payloads"]
+    assert asm["differences"]["Pay.Load"] == {"counts": [2, 3], "used": True, "rule": None}
+    assert asm["unexplained"] == ["Pay.Load"] and cc["unexplained"] == 1
