@@ -64,3 +64,26 @@ def test_installed_defaults_to_cwd(tmp_path, monkeypatch):
     monkeypatch.setattr("zk.core.config.ROOT", site)
     monkeypatch.chdir(work)
     assert Config.load().root == Path.cwd()
+
+
+def test_options_tables(tmp_path):
+    (tmp_path / "zk.toml").write_text(
+        '[options.device_source]\npath = "in"\nversion = "1.0-1"\n', encoding="utf-8")
+    assert Config.load(tmp_path / "zk.toml").options == {"device_source": {"path": "in", "version": "1.0-1"}}
+
+
+def test_options_unknown_port_raises(tmp_path):
+    (tmp_path / "zk.toml").write_text('[options.devicesource]\npath = "x"\n', encoding="utf-8")
+    with pytest.raises(RuntimeError, match=r"unknown port 'devicesource' in \[options\]"):
+        Config.load(tmp_path / "zk.toml")
+
+
+def test_options_non_string_value_raises(tmp_path):
+    (tmp_path / "zk.toml").write_text("[options.device_source]\npath = 3\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="options"):
+        Config.load(tmp_path / "zk.toml")
+
+
+def test_repo_config_names_the_game():
+    cfg = Config.load()
+    assert cfg.package == "com.zodiacknights.game" and cfg.adapters["device_source"] == "adb"

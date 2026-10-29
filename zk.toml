@@ -1,13 +1,18 @@
 # Project configuration. All keys optional; paths are relative to this file.
 # workspace = "workspace"
 # tools = "tools"
-# package = "com.example.game"
+package = "com.zodiacknights.game"
 
 # One adapter per port. A bare name ("x") loads zk.adapters.x; a dotted path loads that module.
 # Each port stays unconfigured until its adapter phase lands.
 [adapters]
-# device_source = "adb"
+device_source = "adb"
 # il2cpp_dump = "..."
 # decompiler = "jadx"
 # type_info = "..."
 # ghidra = "ghidra"
+
+# Adapter settings, one table per port. The folder device_source imports an APK or a pulled folder:
+# [options.device_source]
+# path = "raw/0.4.6-17"     # a .apk file or a folder with apk/ (or *.apk), obb/, data/
+# version = "0.4.6-17"      # label the folder has no device to ask for

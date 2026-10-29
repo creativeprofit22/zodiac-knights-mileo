@@ -14,7 +14,7 @@ def default_root() -> Path:
     return Path.cwd()
 
 
-TOP_LEVEL_KEYS = frozenset({"workspace", "tools", "package", "adapters"})
+TOP_LEVEL_KEYS = frozenset({"workspace", "tools", "package", "adapters", "options"})
 
 
 @dataclass
@@ -24,6 +24,7 @@ class Config:
     workspace: Path = field(default_factory=lambda: default_root() / "workspace")
     tools: Path = field(default_factory=lambda: default_root() / "tools")
     adapters: dict[str, str] = field(default_factory=dict)  # port name -> adapter module
+    options: dict[str, dict[str, str]] = field(default_factory=dict)  # port name -> adapter settings
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
@@ -58,4 +59,12 @@ class Config:
                 raise RuntimeError(f"{path}: unknown port {unknown[0]!r} in [adapters] "
                                    f"(valid: {', '.join(sorted(PORTS))})")
             cfg.adapters = dict(adapters)
+            options = data.get("options", {})
+            if not isinstance(options, dict) or not all(
+                    isinstance(t, dict) and all(isinstance(v, str) for v in t.values()) for t in options.values()):
+                raise RuntimeError(f"{path}: [options.<port>] tables must map setting names to strings")
+            if unknown := sorted(set(options) - set(PORTS)):
+                raise RuntimeError(f"{path}: unknown port {unknown[0]!r} in [options] "
+                                   f"(valid: {', '.join(sorted(PORTS))})")
+            cfg.options = {port: dict(t) for port, t in options.items()}
         return cfg
