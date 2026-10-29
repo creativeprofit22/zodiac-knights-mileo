@@ -1,0 +1,13 @@
+# Project configuration. All keys optional; paths are relative to this file.
+# workspace = "workspace"
+# tools = "tools"
+# package = "com.example.game"
+
+# One adapter per port. A bare name ("x") loads zk.adapters.x; a dotted path loads that module.
+# Each port stays unconfigured until its adapter phase lands.
+[adapters]
+# device_source = "adb"
+# il2cpp_dump = "..."
+# decompiler = "jadx"
+# type_info = "..."
+# ghidra = "ghidra"
