@@ -108,9 +108,11 @@ Enforced by `tests/test_boundaries.py`, which reads imports with `ast` and resol
 
 Stages depend only on port Protocols and artifact contracts, never on a concrete adapter or tool.
 
+A stage must not import another stage's modules (`zk.stages.<other>`). Code that several stages share goes in a `_`-prefixed module such as `zk.stages._unpack`, or in `zk.formats`; `tests/test_boundaries.py` enforces this too.
+
 ## How to add…
 
-- **a stage**: create `zk/stages/<name>.py` with a unique `NAME` (not `game`, `status` or `tools`; `zk` exits 2 otherwise), `HELP`, optional `add_arguments(parser)` and `execute(ctx, args) -> dict`. Append it to `STAGE_MODULES` and add its `Step` to `zk.steps.STEPS` in the same position. Get tools via `ctx.adapter("<port>")`, then call `PORTS["<port>"].contract.verify(out)`. Add a page from `docs/stages/_template.md`.
+- **a stage**: create `zk/stages/<name>.py` with a unique `NAME` (not `game`, `status` or `tools`; `zk` exits 2 otherwise), `HELP`, optional `add_arguments(parser)` and `execute(ctx, args) -> dict`. Append it to `STAGE_MODULES` and add its `Step` to `zk.steps.STEPS` in the same position. Get tools via `ctx.adapter("<port>")`, then call `PORTS["<port>"].contract.verify(out)`. Add a page from `docs/stages/_template.md`. Never import another stage; share code as described in [Dependency rule](#dependency-rule).
 - **an adapter**: create `zk/adapters/<tool>.py` (or a package) with `PORT` and `create(cfg)`. Fetch the tool via `zk.core.toolchain.path_of`, add its entry to `TOOLS` in `zk/core/pins.py`, and list it in the adapter's `PINNED` (plus pip packages in `PACKAGES`). Every entry must carry a `sha256` of the downloaded file; `fetch` refuses to download a tool without one. Set it in `zk.toml`. Its output must satisfy the port's `CONTRACT`.
 - **a port**: create `zk/ports/<port>.py` with `PORT`, the Protocol and `CONTRACT`. Register it in `PORTS` and add a page from `docs/ports/_template.md`. Changing a port contract needs a new ADR (as `device_source` v2 did in ADR 0002).
 - **a format**: create `zk/formats/<format>.py` as a pure function over bytes or paths, with no tools and no workspace. Test it with synthetic bytes and add a page from `docs/formats/_template.md`.
