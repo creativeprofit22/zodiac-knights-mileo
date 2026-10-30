@@ -11,7 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 assets = ["UnityPy==1.25.4", "TypeTreeGeneratorAPI==0.0.10"]
-dev = ["pytest==9.1.1", "UnityPy==1.25.4", "TypeTreeGeneratorAPI==0.0.10"]
+dev = ["pytest==9.2.0", "UnityPy==1.25.4", "TypeTreeGeneratorAPI==0.0.10"]
 
 [project.scripts]
 zk = "zk.cli:main"
