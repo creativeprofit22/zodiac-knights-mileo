@@ -33,11 +33,11 @@ TOOLS: dict[str, Tool] = {t.name: t for t in (
          "apktool.jar", kind="file",
          sha256="dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423"),
     # jadx runs on JDK 21; portable Temurin, only ever used via JAVA_HOME (java_env).
-    Tool("jdk21", "21.0.12.1+1",
-         "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/"
-         "OpenJDK21U-jdk_x64_windows_hotspot_21.0.12.1_1.zip",
-         "jdk-21.0.12.1+1/bin/java.exe",
-         sha256="f9d6e191ab098c0d416e7d588a24420a8621cd2f4720dab2459b8b7b2d2d8b4e"),
+    Tool("jdk21", "21.0.13+9",
+         "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/"
+         "OpenJDK21U-jdk_x64_windows_hotspot_21.0.13_9.zip",
+         "jdk-21.0.13+9/bin/java.exe",
+         sha256="a4dbaa05fca4bd89d84584e58c459bd732efebb1722af80ab13c6516832004f9"),
     # Ghidra 12.2 needs JDK 25 (GettingStarted.md); portable Temurin, only ever used via JAVA_HOME for Ghidra.
     Tool("jdk25", "25.0.5+8",
          "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/"
