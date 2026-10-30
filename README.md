@@ -12,6 +12,8 @@ zk update                  # run every stage, skipping the current ones; prints 
 zk <stage> [...]           # run one stage by hand
 ```
 
+Workspace: each stage writes to `workspace/<area>/<version>/` (`raw`, `unpacked`, `il2cpp`, `code`, `csharp`, `types`, `ghidra`, `assets`, `video`, `data`), and `workspace/manifest.json` records stage results and game facts; see [Architecture](docs/architecture.md).
+
 Game files (`raw/`, `workspace/`, `tools/`, APKs, `.so`, `global-metadata.dat`) are gitignored and must never be committed.
 
 ## Docs
