@@ -1,0 +1,126 @@
+# Plan: `zk update`, one command for the whole pipeline (modelled on SSA update.py 6e1be49)
+
+## Where things stand
+- Seven stages exist in order (`STAGE_MODULES`). `cli.run_stage` records info, `code_hash` and the adapters used. Nothing orchestrates them, and the manifest holds no stamps.
+- `code_hash` today covers the stage, `stages/_*.py`, **all** of `core/ports/formats` and the adapters used. That has two problems. Any core edit reruns everything, including the 20+ minute Ghidra step. It also misses real dependencies: `stages/code.py` imports `stages/assets/_compare.py`, and that file isn't hashed.
+- Pinned tool versions live in `core/toolchain.py`, so they only reach the hash through that whole file.
+- There is no root `README.md` and no `docs/runbook.md`. The Unity version is never checked against a known list. Only the metadata version is (`il2cpp_metadata.KNOWN_VERSIONS`).
+- I couldn't fetch the SSA source from plan mode. The design follows the rule written in the phase, and I'll check it against `update.py` before coding.
+
+## Design
+
+### 1. Code hash = import closure + adapters + pins (`src/zk/core/codehash.py`)
+- Replace the blanket `SHARED` roots with an **in-package import closure**. Parse each file with `ast`, resolve relative imports, and follow only `zk.*` names that are modules (`importlib.util.find_spec`). A stage or adapter that is a package still contributes its whole folder, so Ghidra's `.java` scripts stay hashed. Parent package `__init__` files count only when they are imported directly. Out-of-tree modules (test fakes) are still keyed by module name.
+- Move `Tool` and `TOOLS` into a new `src/zk/core/pins.py`. `toolchain` re-exports them, so `toolchain.TOOLS` and the existing monkeypatches keep working. The closure **excludes** `zk.core.pins`. Each adapter declares `PINNED: tuple[str, ...]` (toolchain names; for example ghidra is `("ghidra", "jdk25")` and il2cppdumper is `("il2cppdumper", "dotnet10")`). Each adapter and the assets stage may also declare `PACKAGES` (pip dists such as `UnityPy` and `TypeTreeGeneratorAPI`). Bumping jadx then reruns only `code` and its dependents, not Ghidra.
+- New `fingerprint_parts(stage_mod, used_ports, cfg) -> dict` returns:
+  - `code_hash`: the closure of the stage plus its adapter modules
+  - `adapters`: port to zk.toml value
+  - `tools`: name to `version sha256`
+  - `packages`: dist to version, or `"missing"`
+  - `options`: the `[options.<port>]` values of the used ports
+- Adapter modules are found with `core.adapters.load_module` and are **never** `create`d. Planning never touches adb or downloads a tool.
+
+### 2. Step declarations as data (`src/zk/steps.py`)
+`Step` is a frozen dataclass:
+- `name`
+- `after`: upstream steps
+- `outputs`: workspace-relative templates with `{version}`, checked with `Path.exists`, never `ws.dir`, so a dry run creates nothing
+- `force_argv`: added when a stamped step reruns because something changed, or under `--force`
+- `source`: always runs, and is skipped only when its result fingerprint is unchanged
+- `fingerprint_keys`: result fields mixed into the fingerprint
+- `report`: label to dotted path in the stage record
+- `warnings`: dotted paths
+- `estimate`: a text hint
+
+| step | after | outputs | report fields |
+|---|---|---|---|
+| acquire (source; fingerprint `version`, `base_apk`) | – | `raw/{v}/apk/base.apk` | base.apk sha |
+| unpack | acquire | `unpacked/{v}` | serialized files, videos; warnings `warnings` |
+| code | unpack | `il2cpp/{v}/summary.json`, `il2cpp/{v}/crosscheck.json`, `code/{v}` | dump totals, `crosscheck.types_match`, `method_gap_classes`, java files |
+| csharp | unpack | `csharp/{v}/report.json` | per-assembly types |
+| ghidra (estimate "full analysis ~20+ min on HDD") | unpack, code | `ghidra/{v}/index.json`, `ghidra/{v}/project` | classes, functions targeted |
+| assets | unpack, code | `assets/{v}/report.json`, `types/{v}/nodes.json` | exported counts, misses, MonoBehaviour failed/by_reason/unexplained, crosscheck unexplained |
+| video | unpack | `assets/{v}/video/report.json` | clips, frames, mismatches |
+
+A test checks that the step names equal `STAGE_MODULES`, each `after` names an earlier step, and `update.py` contains no stage name. That keeps the orchestrator free of stage-specific logic.
+
+### 3. Orchestrator (`src/zk/update.py`)
+- Move `run_stage` to `src/zk/core/runner.py` so both `cli` and `update` can use it without an import cycle. `cli.run_stage` stays as a re-export.
+- A step is **current** only if all of these hold:
+  - its record has an `update_stamp`
+  - the stamp's `fingerprint_parts` match a fresh computation (for the ports in the stamp)
+  - `inputs` match: version, argv and upstream fingerprints
+  - all outputs exist
+- Each step's reason is precise: `no stamp (never run by update, or run manually)`, `code changed`, `adapter ghidra: x→y`, `pinned tool jadx 1.5.5→1.5.6`, `option ghidra.decompile_timeout changed`, `version 0.4.6-17→0.4.7-1`, `upstream unpack changed`, `missing ghidra/<v>/index.json`, `--force`.
+- `fingerprint = sha256(parts + inputs + selected result keys)`. Code changes cascade to dependents through it.
+- Steps are decided **one by one right before running**, so a new version found by acquire flows downstream.
+- On success, write `update_stamp` into the stage record. Manual `zk <stage>` rewrites the record without a stamp, so update reruns it.
+- On failure, catch `Exception`:
+  - remove that step's stamp
+  - print `[update] <step> failed: <error>`, `rerun: zk <step> <argv>` and `resume: zk update --from <step>`
+  - store the partial report
+  - exit 2
+- Flags:
+  - `--from <step>`: earlier steps aren't run, and their stamps supply fingerprints
+  - `--force`: rerun every step with its `force_argv`
+  - `--dry-run`: prints the plan, writes nothing and asks no device. The source step shows as "checks the device source" and downstream decisions assume it is unchanged.
+- The plan is printed before running. Each line shows the decision, the reason, and the last duration (`seconds` kept in the stamp) or the estimate, so Ghidra visibly shows "~20+ min".
+- Clocks are injected (`clock=time.monotonic`, `now=datetime.now`) so tests are deterministic.
+- The **report** is printed as one block and stored as `manifest["update"]`. It holds:
+  - version, started time, totals
+  - per step: status (`ran`/`skipped`/`failed`/`not run`), reason, seconds, counts
+  - checks: dumper cross-check, MonoBehaviour failures
+  - warnings: unpack warnings, unknown metadata or Unity version
+
+### 4. Small stage and format changes
+- `formats/unity_serialized.KNOWN_UNITY_VERSIONS = {"6000.3.2f1"}`. Unpack adds a warning for an unknown Unity version. The fake device gets a `unity_version` option for the test.
+- `assets` returns `crosscheck: {"unexplained": n}` and `monobehaviours.unexplained` so the report can read them from the record.
+- `cli`:
+  - `update` is a subcommand with `--from` (choices: the step names), `--force` and `--dry-run`
+  - `"update"` is added to `RESERVED_NAMES`, since it is a manifest key
+  - `zk.update` joins the boundary rule: it must not import `zk.adapters`
+
+### 5. Docs
+- `docs/runbook.md` covers:
+  - a new game version: `zk update --dry-run`, then `zk update`, what each warning means, the Ghidra time, and resuming with `--from`
+  - importing an APK with the `folder` adapter (a new build needs a new version label)
+  - swapping an adapter when a tool breaks: re-pin in `core/pins.py` with its sha256, or switch `[adapters]` and check what reruns with `--dry-run`
+- `docs/architecture.md` gets an "Update" section. It also covers the closure hash, `PINNED`/`PACKAGES` and `core/runner.py`.
+- New root `README.md` links every page under `docs/`. `tests/test_docs.py` fails if any `docs/**/*.md` isn't linked. `docs/index.md` links the runbook.
+
+## Risks
+- **The first real `zk update` reruns everything**, because no record has a stamp yet: Ghidra ~20+ min plus assets. The second run should skip all steps.
+- acquire with `adb` needs the phone connected. Without it, use `--from unpack` or the `folder` adapter.
+- A new APK under the **same** version label isn't detected by acquire, which skips the pull when `base.apk` exists. The runbook says to use a new label or `zk acquire --force`.
+- The new hash changes every recorded `code_hash` once. That's harmless because nothing is stamped yet.
+- `--force` on acquire with adb pulls the APK again (several GB).
+- `zk.local.toml` (gitignored) lacks `type_info` and `ghidra` adapters. For the real run I'll add the same lines as `zk.toml` (`type_info`, `ghidra`, `video_encoder`, `[options.ghidra]`).
+
+## Verification
+- `python -m pytest -q` with fake adapters only:
+  - two runs in a row skip every step
+  - a different APK or version through the folder adapter reruns from unpack
+  - swapping the `il2cpp_dump` adapter reruns code and everything after it
+  - changing a pinned tool for one adapter reruns only its steps
+  - a manual stage run drops the stamp
+  - deleting an output reruns that step
+  - a failing stage gives exit 2, rerun and resume hints and no stamp, and `--from` resumes
+  - `--dry-run` leaves the manifest and workspace unchanged
+  - `--force` reruns all steps
+  - the report and the manifest `update` key match
+  - the closure test covers `code.py` → `assets/_compare.py` and the pins exclusion
+  - the docs links test
+- `pyright` and `ruff check` are clean, and the boundary test stays green.
+- Real run: `zk --config zk.local.toml update --dry-run`, then `update` (full run, timed), then `update` again (all skipped). The results go into `docs/runbook.md`.
+
+## Steps
+1. Create `src/zk/core/pins.py` (move `Tool` and `TOOLS`), re-export them from `toolchain`, and add `PINNED`/`PACKAGES` to every adapter module and `PACKAGES` to the assets stage. Add tests that every adapter declares `PINNED` and names only known tools.
+2. Rewrite `src/zk/core/codehash.py` around the AST import closure (with the pins exclusion) and add `fingerprint_parts`. Update `tests/test_codehash.py`: closure includes `stages/assets/_compare.py` for `code`, excludes `pins.py`, handles out-of-tree keys, Java scripts and CRLF.
+3. Move `run_stage` to `src/zk/core/runner.py` and re-export it from `cli`. Keep `tests/test_cli.py` green.
+4. Add `KNOWN_UNITY_VERSIONS` and the unpack warning, plus the fake-device `unity_version` option and a test. Add `crosscheck.unexplained` and `monobehaviours.unexplained` to the assets result and its test.
+5. Write `src/zk/steps.py` (the `Step` dataclass and the seven declared steps) and `src/zk/update.py` (decide, plan print, run, stamp, failure hints, `--from`/`--force`/`--dry-run`, report into `manifest["update"]`, injected clocks).
+6. Wire `zk update` into `src/zk/cli.py`, reserve `update`, and add `zk.update` to the boundary rule in `tests/test_boundaries.py`.
+7. Write `tests/test_update.py` covering every case under Verification, using fake adapters and synthetic data.
+8. Write `docs/runbook.md` and root `README.md` (linking every docs page), update `docs/architecture.md` and `docs/index.md`, and add `tests/test_docs.py`.
+9. Run `python -m pytest -q`, `pyright` and `ruff check`, and fix any findings.
+10. Add the missing adapter lines to `zk.local.toml`. Run `zk --config zk.local.toml update --dry-run`, `update` and `update` again on 0.4.6-17. Record the timings and report in `docs/runbook.md`, and report progress with `roadmap_status`.

@@ -1,0 +1,91 @@
+# zk update: cascade on upstream outputs, not upstream fingerprints
+
+## Problem
+`Updater._inputs` puts `upstream = {u: fingerprint(u)}` into each step's inputs. An upstream fingerprint changes whenever its code closure changes, so the `formats/csharp_dump.py` fix (code step only) forced a 178-min ghidra rerun. But ghidra reads only `script.json` and `il2cpp.h` from code, and those Il2CppDumper outputs didn't change.
+
+## Design
+
+### 1. Steps declare what they consume (`src/zk/steps.py`, data only)
+New frozen dataclass:
+```python
+@dataclass(frozen=True)
+class Uses:
+    files: tuple[str, ...] = ()     # workspace-relative globs, "{version}" filled in; content-hashed (sha256)
+    trees: tuple[str, ...] = ()     # bulk folders (multi-GB): size+mtime manifest of every file under them
+    record: tuple[Path_, ...] = ()  # values read from the upstream's manifest record
+```
+`Step.uses: dict[str, Uses]` replaces the `after` field. `after` becomes a read-only property, `tuple(self.uses)`, so existing callers and tests keep working. Shared pattern constants: `SO = "unpacked/{version}/*/lib/*/libil2cpp.so"` and `METADATA = "unpacked/{version}/*/assets/bin/Data/Managed/Metadata/global-metadata.dat"`.
+
+What each stage actually reads (checked in the stage and adapter code):
+
+| step | uses |
+|---|---|
+| acquire | none (source step, unchanged) |
+| unpack | acquire record `base_apk.sha256` (acquire already hashes the APK) |
+| code | acquire record `base_apk.sha256` (jadx reads the raw APK); unpack files SO, METADATA, `unpacked/{version}/*/classes*.dex`; record `il2cpp`, `metadata.path`, `assemblies.game` |
+| csharp | unpack files SO, METADATA; record `il2cpp`, `metadata.path`, `assemblies.game`, `unity_version` |
+| ghidra | unpack file SO; record `il2cpp`. code files `il2cpp/{version}/script.json`, `il2cpp/{version}/il2cpp.h`; record `version`, `abi` |
+| assets | unpack files SO, METADATA; tree `unpacked/{version}/*/assets/bin/Data`; record `il2cpp`, `metadata.path`, `assemblies.game`, `unity_version`. code files `il2cpp/{version}/summary.json`, `il2cpp/{version}/crosscheck/summary.json`, `il2cpp/{version}/DummyDll/*.dll`; record `version` |
+| video | unpack tree `unpacked/{version}/*/assets/Video`; record `videos` |
+
+`steps.py` still imports nothing from stages or adapters.
+
+### 2. Hashing choice: content sha256 for files, size+mtime manifests for bulk trees, with a stat cache
+- **Files get sha256 of their content.** This case needs it: `zk code --force` deletes and rewrites `script.json` and `il2cpp.h` with the same bytes, so size+mtime would always say "changed" and nothing would be saved.
+- **Trees get a size+mtime manifest.** The `Data/` folder (GBs) and `Video/` are only rewritten when unpack reruns, which means a new APK or version, when downstream must rerun anyway. Reading GBs after every unpack would save nothing.
+- **Hashes are cached by size and mtime.** Each consumer stamp stores `file_cache = {rel: [size, mtime_ns, sha256]}`. A file whose size and `mtime_ns` haven't changed reuses its stored hash, so a steady-state check is stat-only. An in-run memo `{rel: (size, mtime_ns, sha)}`, seeded from every stamp's cache, means each file is read at most once per run, even when 4 steps consume `libil2cpp.so`.
+- **Missing files are visible.** A glob that matches nothing is stored as `{pattern: None}`, so a vanished file shows as a change.
+
+### 3. Orchestrator (`src/zk/update.py`, still no stage names)
+- `_consumed(step) -> {upstream: {"files": {rel: sha|None}, "trees": {rel: sha|None}, "record": {"a.b": value}}}` is computed from the workspace through the memo. It is read-only.
+- New-format inputs are `{"version", "argv", "consumed"}`; `upstream` is dropped. `inputs_diff` reports `"{u} output {key} changed"` per differing file, tree or record key, at most 3 per upstream plus `+N more`.
+- The step's own `parts` (code closure, adapters, PINNED tools, packages, options), version, argv and missing outputs still trigger its own rerun, unchanged.
+- **Real run:** each step decides just in time, after its upstreams ran, against the files on disk. code rerunning with byte-identical `script.json` and `il2cpp.h` means ghidra skips.
+- **Dry run:** nothing has rerun yet, so a step whose own reasons are empty but which consumes a step planned to run or maybe-run gets the new decision `maybe`, with reason `reruns if <u> output changes`. Its dependents are pending in turn. It still writes nothing; reading and hashing files is read-only.
+- `fingerprint` stays in the stamp (the source step's change detection uses it). `self.fps` and `RERUN` used for downstream inputs are removed in favour of a `pending: set[str]` (dry run) and a `changed: set[str]` (real run: steps that ran, and the source only if its result changed).
+- **Legacy stamps** (inputs without `consumed`, i.e. every stamp in the real workspace today) are adopted without a rerun when the old, stricter rule still holds:
+  - parts, version and argv are unchanged, and outputs exist;
+  - every old `upstream[u]` equals u's stamp fingerprint as snapshotted at run start;
+  - no upstream in `uses` changed or is pending this run.
+
+  On a real run the stamp is rewritten in the new format with the current consumed digests and `file_cache`. A dry run only reports `skip` with reason `unchanged`. If the rule fails, the step reruns with its old-style reason.
+- On a real-run skip, the stamp is rewritten only when `file_cache` or the legacy format changed (no churn).
+- **Flush:** all `[update]` prints go through one helper, `_say(msg, *, err=False)`, that prints with `flush=True`. Stage and tool output is unchanged.
+
+### 4. Docs
+- `docs/architecture.md` Update section: the Inputs, Current, Stamp and steps-are-data bullets get `uses`, consumed digests, the hashing choice, `maybe` in the plan, and legacy adoption.
+- `docs/runbook.md`: the adapter-swap line now says "its dependents show `<u> output … changed` only if that step's outputs differ". Add a short note that a code-only change no longer reruns ghidra unless `script.json` or `il2cpp.h` change, and that `maybe` in a dry run means "decided after the upstream runs".
+
+## Risks
+- **Stage reads nobody declared.** A stage that reads an upstream output not in `uses` would be wrongly skipped. Mitigation: I audited each stage and adapter read above. A new test checks that every key in each `Step.uses` is an earlier step, and the docs tell stage authors to declare reads.
+- **Non-deterministic dumpers.** If Il2CppDumper's `DummyDll` writes random MVIDs, assets (about 1 min) reruns after every code rerun. That is correct and cheap, and ghidra doesn't consume `DummyDll`.
+- **Slower first plan.** The first plan after this change hashes libil2cpp.so, the metadata, dex, `script.json`, `il2cpp.h` and `DummyDll` once, a few hundred MB, taking a few seconds on HDD. Dry runs don't persist the cache, so they repeat that until a real run stores it.
+- **Two existing assertions change.** They encode the old rule or wording, not removed behaviour:
+  - `test_dry_run_writes_nothing` expects ghidra `run … upstream code changed`; it becomes `maybe … reruns if code output changes`.
+  - `test_new_version_reruns_from_unpack` expects `upstream acquire changed` for unpack; it becomes a prefix check on `version 0.4.6-17->0.4.7-1` plus `missing unpacked/0.4.7-1`.
+
+  All other update tests stay as they are.
+
+## Verification
+- New tests in `tests/test_update.py`:
+  1. A code-closure change with identical outputs (wrap `update.fingerprint_parts` to alter `code_hash` for the code stage module only) reruns code (`code changed`) and skips ghidra, assets, csharp and video.
+  2. The same change plus a wrapped `code.execute` that appends a line to `il2cpp/<v>/il2cpp.h` reruns ghidra with reason `code output il2cpp/0.4.6-17/il2cpp.h changed`; assets is still skipped because it doesn't consume `il2cpp.h`.
+  3. Legacy stamps (converted from a fresh run: drop `consumed` and `file_cache`, add `upstream` = the upstream stamp fingerprints) plan all-skip in a dry run, skip on a real run, and come out in the new format.
+  4. The dry run shows `maybe` for ghidra when code is planned to run.
+  5. `[update]` prints flush: replace stdout with a StringIO subclass counting `flush()` calls.
+  6. Every key of each `Step.uses` is an earlier step, and `Step.after == tuple(uses)`.
+- `python -m pytest -q`, `ruff check src tests`, `pyright`.
+- `python -m zk --config zk.local.toml update --dry-run` against the real workspace: every step `skip` via legacy adoption, ghidra not `run` or `maybe`. No real update.
+
+Sources: SSA `update.py` (6e1be49) is already cited on this phase; no new corpus code was retrieved for this plan.
+
+## Steps
+1. In `src/zk/steps.py`, add `Uses`, the `SO` and `METADATA` pattern constants, `Step.uses`, and an `after` property derived from `uses`, and declare `uses` for every step per the table above.
+2. In `src/zk/update.py`, add `_say` (flush) and route every `[update]` print through it.
+3. In `src/zk/update.py`, add the hashing layer: glob expansion, content sha256 with the stat-keyed memo seeded from stamp `file_cache`, tree size+mtime manifests, record lookups, and `_consumed(step)`.
+4. In `src/zk/update.py`, switch inputs to `{version, argv, consumed}`, rewrite `inputs_diff` for consumed digests, and replace `fps`/`RERUN` with `changed` (run) and `pending` (plan), including the `maybe` decision.
+5. In `src/zk/update.py`, add legacy-stamp adoption using a start-of-run fingerprint snapshot; on a real run rewrite adopted or refreshed stamps (with `file_cache`) only when they changed.
+6. Update the two old-rule assertions in `tests/test_update.py` and add tests 1–6 from Verification.
+7. Update `docs/architecture.md` (Update section) and `docs/runbook.md` (adapter-swap line, output-cascade and `maybe` note).
+8. Run `python -m pytest -q`, `ruff check src tests` and `pyright`, and fix anything they report.
+9. Run `python -m zk --config zk.local.toml update --dry-run` on the real workspace and confirm ghidra is planned `skip`; don't run a real update.
