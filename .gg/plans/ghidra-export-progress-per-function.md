@@ -1,0 +1,40 @@
+# Ghidra export: progress lines and per-function scheduling
+
+Phase aad89b74 (retro gaps G2, G3). Nothing has been done yet: `Il2CppExport.java` still submits one pool task per class file and prints progress only every 100 files.
+
+## Facts checked
+- `src/zk/adapters/ghidra/scripts/Il2CppExport.java` (135 lines): one `pool.submit` per file, functions decompiled in a loop, `.part` + `Files.move`, `ThreadLocal<DecompInterface>` per pool thread, `n % 100` progress.
+- On 0.4.6-17, `ZodiacKnights.Logic/GameServer.c` has 110 target functions; 6 of them currently fail (300 s timeout each), so a single-thread run of this file costs at least 30 min in timeouts alone.
+- The adapter (`src/zk/adapters/ghidra/__init__.py`) passes `targets functions timeout` to the script; the `threads` arg is never passed (default = cores/2). No adapter argument change is needed.
+- Analyzer stdout is not captured (`self.run(cmd, ..., check=False)`), so script `println` shows live on the console and in `headless.script.log`.
+
+## Design (Il2CppExport.java only)
+1. **Per-function tasks.** For each file still to do, build a small job: `rel`, its functions in RVA order (the existing `TreeMap<Address, Function>` values), `String[] parts`, `AtomicInteger remaining`. Submit one pool task per function. A task decompiles with the thread's long-lived `DecompInterface`, builds exactly the same block as today (`// name @ entry\n` + C, or `// decompilation failed: <msg>\n`, then `\n`) into `parts[i]`, bumps the counters, and when `remaining.decrementAndGet() == 0` joins `parts` in order, writes `<rel>.part`, renames it with `REPLACE_EXISTING` and counts the file. Output bytes per file are therefore identical to the per-file loop.
+2. **Submission order:** files with the most functions first (ties by path), all of a file's functions submitted together, so big files spread across all workers at the start instead of finishing last, and files still complete one by one (resumable: an interrupted run leaves only `.part` files, which the adapter already deletes; existing `.c` files are still skipped).
+3. **Progress every 60 s:** a single-thread daemon `ScheduledExecutorService` (`scheduleAtFixedRate`, 60 s) prints `Il2CppExport: progress <elapsed>s: files n/N, functions m/M, failed k` (N/M = files/functions to do in this run). Shut down in the existing `finally`, together with the pool and the `DecompInterface`s. The final `files=… functions=… failed=…` line stays the same; the 100-file line is dropped (replaced by the timed one).
+4. Cancellation and errors as today: a cancelled task returns early (its file is never written); a write exception surfaces through `Future.get()`.
+5. Update the header comment to describe per-function scheduling.
+
+## Tests and docs
+- `tests/test_ghidra.py`: extend `test_pins_and_scripts_ship_in_package` (or a new test next to it) to check the export script keeps the contract the Python side relies on: `.part`, `decompilation failed: ` comment prefix, `scheduleAtFixedRate`. No new Python argument, so no other test changes.
+- `docs/stages/ghidra.md`: step 4 of "How the run works" describes per-function scheduling, largest-first order, and the 60 s progress line (with an example). Replace the "a file's functions are decompiled one after another" sentence in Failure modes, and add a measured before/after line for the GameServer.c benchmark.
+
+## Measurement (0.4.6-17, real Ghidra, long runs)
+- Back up the current `workspace/ghidra/0.4.6-17/functions/ZodiacKnights.Logic/GameServer.c` outside the workspace (system temp dir) before deleting it; it is generated output, but kept for comparison and restore.
+- Baseline with the **unchanged** script first: delete `GameServer.c`, `time zk ghidra --skip-analysis` (expected ~60+ min), keep its output as `baseline.c`.
+- After the change: delete `GameServer.c` again, same command, record wall time; `diff` the new file with `baseline.c`. Blocks may only differ for functions near the 300 s limit (timeouts depend on load); any other difference is a bug. Check `headless.script.log` for progress lines ≤ 60 s apart.
+
+## Risks
+- Timeouts under heavier parallel load: more functions run at once, so a borderline function could time out in one run and not in another. Report any such differing blocks rather than calling it byte-identical.
+- Editing the `.java` changes the stage `code_hash`, so the recorded ghidra manifest entry becomes stale until the `--skip-analysis` run re-records it (that run is part of the measurement anyway).
+- Memory: parts of in-flight files are held in memory; same order as today (whole file per StringBuilder), heap was 4.6 of 12 GB.
+
+## Steps
+1. Report `in-progress` for the phase with roadmap_status.
+2. Back up `GameServer.c` to a temp dir, delete it, run `time zk ghidra --skip-analysis` with the current script, save the result as `baseline.c` and note the wall time.
+3. Rewrite the scheduling in `Il2CppExport.java`: per-file jobs with `parts[]`/`remaining`, one task per function, largest-file-first submission, join + `.part` + atomic rename on the last function, 60 s `ScheduledExecutorService` progress line, shutdown in `finally`, updated header comment.
+4. Add the script-contract assertions in `tests/test_ghidra.py`.
+5. Run `python -m pytest -q`, `pyright`, `ruff check`.
+6. Delete `GameServer.c`, run `time zk ghidra --skip-analysis` with the new script, note wall time, diff against `baseline.c`, and confirm progress lines every ≤ 60 s in `headless.script.log`.
+7. Update `docs/stages/ghidra.md` (run steps, progress output, per-function scheduling, before/after wall times) and run `python -m pytest -q` again (docs tests).
+8. Report `done` with roadmap_status, citing wall times, the diff result and the check results as evidence.
