@@ -252,6 +252,10 @@ def test_pins_and_scripts_ship_in_package():
     assert {p.name for p in adapter.SCRIPTS.glob("*.java")} == {"Il2CppImport.java", "Il2CppExport.java"}
     imp = (adapter.SCRIPTS / "Il2CppImport.java").read_text(encoding="utf-8")
     assert "didParseSucceed" in imp and "Call Convention ID" in imp and "Decompiler Switch Analysis" in imp
+    exp = (adapter.SCRIPTS / "Il2CppExport.java").read_text(encoding="utf-8")
+    # the adapter deletes stale .part files and counts "decompilation failed: " comments
+    assert '".part"' in exp and '"// decompilation failed: "' in exp
+    assert "scheduleAtFixedRate" in exp and "Il2CppExport: progress " in exp
 
 
 def test_create_reads_decompile_timeout_option(tmp_path):
