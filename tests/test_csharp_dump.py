@@ -213,3 +213,18 @@ namespace ZK
 """
     s = csharp_dump.summarize_inspector({"Game.cs": text})
     assert s["assemblies"]["Game"]["classes"] == {"ZK.Bits": 4}
+
+
+def test_inspector_accessor_with_attribute_counts_as_accessor():
+    text = """\
+namespace ZK
+{
+\tpublic class Settings // TypeDefIndex: 0
+\t{
+\t\tpublic bool mode { get; [Obsolete("Removed. #from(6000.3)", true)] set; } // 0x1-0x2 0x3-0x4
+\t\tpublic int size { [CompilerGenerated] get; } // 0x5-0x6
+\t}
+}
+"""
+    s = csharp_dump.summarize_inspector({"Game.cs": text})
+    assert s["assemblies"]["Game"]["classes"] == {"ZK.Settings": 3}

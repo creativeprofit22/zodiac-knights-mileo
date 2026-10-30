@@ -20,6 +20,8 @@ _DELEGATE = re.compile(r"(?:^|\s)delegate\s+(.*)$")
 _MANGLE = re.compile(r"[^\w.`]")
 # Il2CppInspector writes indexer accessors with bodies: `this[int i] { get => default; set {} }`
 _ACCESSOR = re.compile(r"\b(?:get|set|init|add|remove)\s*(?:;|=>|\{)")
+# ...and attributes on one accessor: `{ get; [Obsolete("", true)] set; }` (their "(" would read as a method)
+_ACCESSOR_ATTRIBUTE = re.compile(r"\[[^\[\]]*\]\s*(?=(?:get|set|init|add|remove)\s*(?:;|=>|\{))")
 MODULE = "<Module>"
 _STRING = re.compile(r'@?"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
 
@@ -214,7 +216,7 @@ def summarize_inspector(files: Mapping[str, str]) -> Summary:
         scopes: list[tuple[str, str]] = []  # (kind, name) for each open brace: ns, type or other
         pending: tuple[str, str] | None = None
         for line in _uncomment_blocks(files[fname].splitlines()):
-            code = _strip_attributes(_code(line))
+            code = _ACCESSOR_ATTRIBUTE.sub("", _strip_attributes(_code(line)))
             if not code:
                 continue
             in_type = bool(scopes) and scopes[-1][0] == "type"
