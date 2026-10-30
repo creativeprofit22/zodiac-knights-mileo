@@ -15,6 +15,7 @@ from zk.formats import csharp_dump, il2cpp_script
 from zk.ports.il2cpp_dump import CONTRACT
 
 PORT = "il2cpp_dump"
+PINNED: tuple[str, ...] = ("il2cppdumper", "dotnet10")  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "il2cppdumper"
 TOOL_FILES = ("dump.cs", "script.json", "il2cpp.h")
 _ERROR = re.compile(r"\b(?:error|exception)\b", re.IGNORECASE)

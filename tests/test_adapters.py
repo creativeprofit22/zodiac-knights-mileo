@@ -50,3 +50,27 @@ def test_adapter_for_wrong_port(tmp_path):
 def test_protocol_mismatch(tmp_path):
     with pytest.raises(RuntimeError, match="does not satisfy the il2cpp_dump port"):
         _ctx(tmp_path, il2cpp_dump="tests.fakes.bad_port").adapter("il2cpp_dump")
+
+
+def test_every_adapter_declares_known_pins():
+    import importlib
+    import pkgutil
+
+    import zk.adapters
+    from zk.core.pins import TOOLS
+    found = 0
+    for info in pkgutil.iter_modules(zk.adapters.__path__):
+        mod = importlib.import_module(f"zk.adapters.{info.name}")
+        if not hasattr(mod, "PORT"):
+            continue
+        found += 1
+        pinned = getattr(mod, "PINNED", None)
+        assert isinstance(pinned, tuple), f"{info.name} has no PINNED tuple"
+        assert set(pinned) <= set(TOOLS), f"{info.name} pins unknown tools {set(pinned) - set(TOOLS)}"
+        assert all(isinstance(p, str) for p in getattr(mod, "PACKAGES", ()))
+    assert found >= 10
+
+
+def test_toolchain_reexports_pins():
+    from zk.core import pins, toolchain
+    assert toolchain.TOOLS is pins.TOOLS and toolchain.Tool is pins.Tool

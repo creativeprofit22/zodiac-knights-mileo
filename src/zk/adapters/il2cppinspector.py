@@ -15,6 +15,7 @@ from zk.formats import csharp_dump
 from zk.ports.il2cpp_crosscheck import CONTRACT
 
 PORT = "il2cpp_crosscheck"
+PINNED: tuple[str, ...] = ("il2cppinspector", "dotnet10")  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "il2cppinspector"
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]

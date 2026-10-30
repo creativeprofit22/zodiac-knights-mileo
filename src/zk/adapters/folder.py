@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 PORT = "device_source"
+PINNED: tuple[str, ...] = ()  # toolchain pins whose bump reruns this adapter's steps
 LAYOUT_DIRS = frozenset({"apk", "obb", "data"})  # a folder already in raw/<v>/ layout keeps its split
 
 

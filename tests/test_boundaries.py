@@ -13,6 +13,8 @@ FORBIDDEN = {
     "zk.ports": ("zk.stages", "zk.adapters", "zk.cli"),
     "zk.stages": ("zk.adapters", "zk.core.toolchain", "zk.cli"),
     "zk.adapters": ("zk.stages", "zk.cli"),
+    "zk.update": ("zk.adapters", "zk.cli"),
+    "zk.steps": ("zk.adapters", "zk.stages", "zk.cli"),
 }
 
 
@@ -76,6 +78,7 @@ def _tree(tmp_path, files):
     ("zk/stages/s.py", "from ..core import toolchain\n", "zk.stages.s imports zk.core.toolchain"),
     ("zk/stages/pkg/__init__.py", "from ...adapters.ghidra import x\n", "zk.stages.pkg imports zk.adapters.ghidra"),
     ("zk/adapters/a.py", "from zk.stages import code\n", "zk.adapters.a imports zk.stages"),
+    ("zk/update.py", "from .adapters import jadx\n", "zk.update imports zk.adapters"),
 ])
 def test_violation_is_detected(tmp_path, rel, text, expect):
     assert expect in violations(_tree(tmp_path, {rel: text}))

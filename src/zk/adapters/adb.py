@@ -15,6 +15,7 @@ from pathlib import Path
 from zk.core import toolchain
 
 PORT = "device_source"
+PINNED: tuple[str, ...] = ()  # toolchain pins whose bump reruns this adapter's steps
 
 Capture = Callable[[list[str]], str]  # run a command, return stdout; raises CalledProcessError on failure
 Run = Callable[[list[str]], object]  # run a command for its side effects; raises CalledProcessError

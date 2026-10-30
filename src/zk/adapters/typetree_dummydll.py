@@ -7,6 +7,8 @@ from zk.adapters import _typetree
 from zk.ports.il2cpp_dump import CONTRACT as DUMP_CONTRACT
 
 PORT = "type_info"
+PINNED: tuple[str, ...] = ()  # toolchain pins whose bump reruns this adapter's steps
+PACKAGES: tuple[str, ...] = ("TypeTreeGeneratorAPI",)  # pip dists whose version is part of the update fingerprint
 NAME = "typetree_dummydll"
 
 

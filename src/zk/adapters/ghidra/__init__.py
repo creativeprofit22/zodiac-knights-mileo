@@ -20,6 +20,7 @@ from zk.core import toolchain
 from zk.ports.ghidra import CONTRACT
 
 PORT = "ghidra"
+PINNED: tuple[str, ...] = ("ghidra", "jdk25")  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "ghidra"
 JDK = "jdk25"
 PROJECT = "libil2cpp"

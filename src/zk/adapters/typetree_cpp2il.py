@@ -10,6 +10,8 @@ from pathlib import Path
 from zk.adapters import _typetree
 
 PORT = "type_info"
+PINNED: tuple[str, ...] = ()  # toolchain pins whose bump reruns this adapter's steps
+PACKAGES: tuple[str, ...] = ("TypeTreeGeneratorAPI",)  # pip dists whose version is part of the update fingerprint
 NAME = "typetree_cpp2il"
 
 

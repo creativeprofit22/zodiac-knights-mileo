@@ -16,6 +16,7 @@ from zk.formats import csharp_project
 from zk.ports.decompiler import CONTRACT
 
 PORT = "decompiler"
+PINNED: tuple[str, ...] = ("ilspycmd",)  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "ilspycmd"
 # ilspycmd exits 70 when some members failed; it still writes the project with the error text in their bodies.
 PARTIAL_EXIT = 70

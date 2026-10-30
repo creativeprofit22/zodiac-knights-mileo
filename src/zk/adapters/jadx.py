@@ -13,6 +13,7 @@ from zk.core import toolchain
 from zk.ports.java_decompiler import CONTRACT
 
 PORT = "java_decompiler"
+PINNED: tuple[str, ...] = ("jadx", "jdk21")  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "jadx"
 
 Runner = Callable[..., "subprocess.CompletedProcess[str]"]

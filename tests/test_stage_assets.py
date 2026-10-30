@@ -105,7 +105,9 @@ def test_unexplained_monobehaviour_failure_fails_the_stage(tmp_path, load, monke
     monkeypatch.setitem(_known.MONOBEHAVIOURS, "UnityEngine.UI|UnityEngine.UI.Missing", "engine class")
     monkeypatch.setitem(_known.MONOBEHAVIOURS, "UnityEngine.UI|UnityEngine.UI.Image", "explained")
     assert cli.main(["--config", str(cfg), "assets"]) == 0
-    assert _manifest(tmp_path)["assets"]["monobehaviours"]["failed"] == 2
+    rec = _manifest(tmp_path)["assets"]
+    assert rec["monobehaviours"]["failed"] == 2 and rec["monobehaviours"]["unexplained"] == 0
+    assert rec["crosscheck"] == {"unexplained": 0}
 
 
 def test_assets_needs_crosscheck(tmp_path, load):

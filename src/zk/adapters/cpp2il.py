@@ -14,6 +14,7 @@ from zk.core import toolchain
 from zk.ports.il2cpp_assemblies import CONTRACT
 
 PORT = "il2cpp_assemblies"
+PINNED: tuple[str, ...] = ("cpp2il",)  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "cpp2il"
 OUTPUT_FORMAT = "dummydll"
 

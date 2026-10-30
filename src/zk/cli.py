@@ -1,4 +1,4 @@
-"""`zk <stage> [...]`: one subcommand per stage, plus `tools` and `status`."""
+"""`zk <stage> [...]`: one subcommand per stage, plus `update`, `tools` and `status`."""
 from __future__ import annotations
 
 import argparse
@@ -6,28 +6,15 @@ import json
 import sys
 from pathlib import Path
 
-from . import stages
+from . import stages, update
 from .core import toolchain
-from .core.codehash import code_hash, stage_sources
 from .core.context import Context
+from .core.runner import run_stage
 from .core.workspace import GAME
 
-RESERVED_NAMES = frozenset({GAME, "status", "tools"})  # manifest key / built-in subcommands
+__all__ = ["main", "run_stage"]
 
-
-def run_stage(ctx: Context, mod, args) -> dict:
-    """Run one stage and record its result, code hash and adapters in the manifest.
-
-    Exceptions from the stage propagate; nothing is recorded then."""
-    ctx.used.clear()
-    info = mod.execute(ctx, args)
-    used = dict(ctx.used)
-    info = {**info,
-            "code_hash": code_hash(stage_sources((mod.__name__, mod.__file__),
-                                                    [(u["module"], u["file"]) for u in used.values()])),
-            "adapters": {port: {"adapter": u["adapter"], "module": u["module"]} for port, u in used.items()}}
-    ctx.ws.record(mod.NAME, info)
-    return info
+RESERVED_NAMES = frozenset({GAME, update.REPORT_KEY, "status", "tools"})  # manifest keys / built-in subcommands
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,6 +25,11 @@ def main(argv: list[str] | None = None) -> int:
     t = sub.add_parser("tools", help="download the pinned portable tools into ./tools")
     t.add_argument("names", nargs="*", help="default: all")
     sub.add_parser("status", help="show configured adapters and the workspace manifest")
+    u = sub.add_parser("update", help="run every stage in order, skipping the ones that are current")
+    u.add_argument("--from", dest="start", choices=[s.name for s in update.STEPS],
+                   help="start at this step; earlier steps are not run")
+    u.add_argument("--force", action="store_true", help="rerun every step with its --force flags")
+    u.add_argument("--dry-run", action="store_true", help="only print the plan; write nothing, ask no device")
 
     modules = {}
     for mod in stages.load_all():
@@ -72,6 +64,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "status":
         print(json.dumps({"adapters": ctx.cfg.adapters, "manifest": ctx.ws.manifest()}, indent=2))
         return 0
+
+    if args.cmd == "update":
+        prog = f"zk --config {args.config}" if args.config else "zk"
+        return update.main(ctx, args.start, args.force, args.dry_run, prog=prog)
 
     mod = modules[args.cmd]
     try:

@@ -2,7 +2,8 @@
 
 `zk` is a reverse-engineering pipeline for Zodiac Knights (Android, Unity/IL2CPP). It runs stages over a workspace, and every external tool sits behind a port.
 
-- [Architecture](architecture.md): layout, data flow, workspace, manifest, adapters, dependency rule
+- [Architecture](architecture.md): layout, data flow, workspace, manifest, update, adapters, dependency rule
+- [Runbook](runbook.md): a new game version, importing an APK, swapping an adapter when a tool breaks
 - Decisions: [ADR 0001: pipeline with ports](adr/0001-pipeline-with-ports.md), [ADR 0002: device_source v2](adr/0002-device-source-v2.md), [ADR 0003: il2cpp_dump v2 + il2cpp_crosscheck](adr/0003-il2cpp-dump-v2.md), [ADR 0004: decompiler v2 (C#) + java_decompiler + il2cpp_assemblies](adr/0004-decompiler-v2.md), [ADR 0005: ghidra v2](adr/0005-ghidra-v2.md), [ADR 0006: type_info v2](adr/0006-type-info-v2.md), [ADR 0007: video_encoder](adr/0007-video-encoder.md)
 - Ports: [device_source](ports/device_source.md) (v2), [il2cpp_dump](ports/il2cpp_dump.md) (v2), [il2cpp_crosscheck](ports/il2cpp_crosscheck.md), [java_decompiler](ports/java_decompiler.md), [il2cpp_assemblies](ports/il2cpp_assemblies.md), [decompiler](ports/decompiler.md) (v2), [type_info](ports/type_info.md) (v2), [ghidra](ports/ghidra.md) (v2), [video_encoder](ports/video_encoder.md)
 - Stages: [acquire](stages/acquire.md), [unpack](stages/unpack.md), [code](stages/code.md), [csharp](stages/csharp.md), [ghidra](stages/ghidra.md), [assets](stages/assets.md), [video](stages/video.md). New stages start from the [stage template](stages/_template.md).
@@ -16,6 +17,7 @@ pip install -e ".[dev]"
 python -m pytest -q        # offline, synthetic data only
 zk status                  # configured adapters + workspace manifest
 zk tools [names]           # download pinned tools into ./tools
+zk update [--dry-run]      # run every stage, skipping the current ones
 zk <stage> [...]           # run a stage; records its result in workspace/manifest.json
 ```
 

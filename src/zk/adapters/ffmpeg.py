@@ -12,6 +12,7 @@ from pathlib import Path
 from zk.ports.video_encoder import verify_output
 
 PORT = "video_encoder"
+PINNED: tuple[str, ...] = ()  # toolchain pins whose bump reruns this adapter's steps
 TOOL = "ffmpeg"
 MISSING = "ffmpeg not found: install ffmpeg (or set [options.video_encoder] path) or drop --encode"
 

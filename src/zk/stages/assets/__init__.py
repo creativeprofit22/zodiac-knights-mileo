@@ -18,6 +18,7 @@ from zk.stages.assets import _export, _known, _scene, _unity
 from zk.stages.assets._compare import compare, tag_used
 
 NAME = "assets"
+PACKAGES: tuple[str, ...] = ("UnityPy",)  # pip dists whose version is part of the update fingerprint
 HELP = "export Unity assets, MonoBehaviours (type_info port) and the scene hierarchy"
 SCENE = "scene"
 CHOICES = (*_export.TRACKED, SCENE)
@@ -227,5 +228,7 @@ def execute(ctx, args: argparse.Namespace) -> dict:
         raise RuntimeError(f"{'; '.join(problems)}; see {out / 'report.json'}")
     return {"version": version, "unity_version": unity_version, "out": str(out), "report": str(out / "report.json"),
             "inventory": report["inventory"], "exported": report["exported"], "misses": len(misses),
-            "monobehaviours": {k: mb[k] for k in ("total", "json", "failed", "by_reason")},
+            "monobehaviours": {**{k: mb[k] for k in ("total", "json", "failed", "by_reason")},
+                               "unexplained": len(mb["unexplained"])},
+            "crosscheck": {"unexplained": crosscheck["unexplained"]},
             "scenes": scenes, "type_info": ti_info, "exported_this_run": done_now}
