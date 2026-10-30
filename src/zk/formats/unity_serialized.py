@@ -13,6 +13,7 @@ MIN_FORMAT, MAX_FORMAT = 9, 40
 WIDE_HEADER_FORMAT = 22
 _VERSION = re.compile(rb"((?:\d{4}|\d)\.\d+\.\d+[a-z]\d+)\0")
 HEAD_BYTES = 0x30 + 32  # enough to read any supported header + version string
+KNOWN_UNITY_VERSIONS = frozenset({"6000.3.2f1"})  # engine builds this pipeline has been checked against
 
 
 @dataclass(frozen=True)

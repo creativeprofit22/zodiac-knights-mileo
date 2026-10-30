@@ -72,6 +72,10 @@ def inventory(root: Path) -> dict:
         warnings.append(f"{_rel(ggm, root)} is not a SerializedFile this pipeline can read")
     else:
         unity_version, serialized_format = sh.unity_version, sh.format
+        if unity_version not in unity_serialized.KNOWN_UNITY_VERSIONS:
+            known = ", ".join(sorted(unity_serialized.KNOWN_UNITY_VERSIONS))
+            warnings.append(f"Unity version {unity_version} is not one this pipeline has been checked against "
+                            f"({known}); check the asset and type-info output")
 
     assemblies = None
     if (sp := _find(roots, SCRIPTING_ASSEMBLIES)) is None:

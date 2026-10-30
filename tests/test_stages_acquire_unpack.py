@@ -93,3 +93,12 @@ def test_inventory_of_empty_tree_warns(tmp_path):
     assert inv["backend"] == "unknown" and inv["unity_version"] is None and inv["abis"] == []
     assert any("globalgamemanagers" in w for w in inv["warnings"])
     assert any("ScriptingAssemblies.json" in w for w in inv["warnings"])
+
+
+def test_unknown_unity_version_is_a_warning(tmp_path):
+    cfg = _config(tmp_path, unity_version="6000.4.0f1")
+    assert cli.main(["--config", str(cfg), "acquire"]) == 0
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    u = _manifest(tmp_path)["unpack"]
+    assert u["unity_version"] == "6000.4.0f1"
+    assert len(u["warnings"]) == 1 and "Unity version 6000.4.0f1" in u["warnings"][0]

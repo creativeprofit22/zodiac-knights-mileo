@@ -28,13 +28,13 @@ def scripting_assemblies():
     return json.dumps({"names": names, "types": types})
 
 
-def apk_files(metadata_version=39):
+def apk_files(metadata_version=39, unity=UNITY):
     data = "assets/bin/Data/"
     files = {f"lib/{abi}/libil2cpp.so": b"\x7fELF" for abi in ABIS}
     files.update({
         "lib/arm64-v8a/libunity.so": b"\x7fELF",
         data + "Managed/Metadata/global-metadata.dat": metadata(metadata_version),
-        data + "globalgamemanagers": serialized(),
+        data + "globalgamemanagers": serialized(version=unity),
         data + "globalgamemanagers.assets.split0": serialized(),
         data + "globalgamemanagers.assets.split1": b"\x00" * 64,
         data + "globalgamemanagers.assets.split2": b"\x00" * 64,
@@ -54,9 +54,10 @@ def apk_files(metadata_version=39):
 
 
 class FakeDevice:
-    def __init__(self, version, metadata_version):
+    def __init__(self, version, metadata_version, unity=UNITY):
         self.version = version
         self.metadata_version = metadata_version
+        self.unity = unity
         self.pulls = 0
 
     def identify(self, package):
@@ -66,11 +67,13 @@ class FakeDevice:
         self.pulls += 1
         (dest / "apk").mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(dest / "apk" / "base.apk", "w") as z:
-            for name, data in sorted(apk_files(self.metadata_version).items()):
-                z.writestr(name, data)
+            for name, data in sorted(apk_files(self.metadata_version, self.unity).items()):
+                # fixed timestamp: a re-pull must give identical bytes
+                z.writestr(zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0)), data)
         return {"pulled": {"apk": ["base.apk"], "obb": False, "data": False}}
 
 
 def create(cfg):
     opts = cfg.options.get(PORT, {})
-    return FakeDevice(opts.get("version", "0.4.6-17"), int(opts.get("metadata_version", "39")))
+    return FakeDevice(opts.get("version", "0.4.6-17"), int(opts.get("metadata_version", "39")),
+                      opts.get("unity_version", UNITY))
