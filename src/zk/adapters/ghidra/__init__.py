@@ -21,6 +21,7 @@ from zk.ports.ghidra import CONTRACT
 
 PORT = "ghidra"
 PINNED: tuple[str, ...] = ("ghidra", "jdk25")  # toolchain pins whose bump reruns this adapter's steps
+UNFINGERPRINTED_OPTIONS: tuple[str, ...] = ("maxmem",)  # JVM heap only: changing it must not redo the analysis
 TOOL = "ghidra"
 JDK = "jdk25"
 PROJECT = "libil2cpp"
@@ -180,7 +181,10 @@ class GhidraHeadless:
         # stdin closed: analyzeHeadless must never wait for input
         proc = self.run(cmd, stdin=subprocess.DEVNULL, env=ghidra_env(jdk_home, self.maxmem, dict(os.environ)),
                         check=False)
-        errors = [e for p in run_logs(log, start)
+        # Verified on 12.2: uncaught script exceptions log `ERROR (HeadlessAnalyzer) REPORT SCRIPT ERROR` to headless.log;
+        # the script log is scanned too in case a script prints one there.
+        script_log = log.with_suffix(".script.log")
+        errors = [e for p in run_logs(log, start) + ([script_log] if script_log.exists() else [])
                   for e in headless_errors(run_lines(p.read_text(encoding="utf-8", errors="replace"), start))]
         if proc.returncode != 0 or errors:
             detail = errors[0][:300] if errors else "no ERROR line in the log"
@@ -207,5 +211,9 @@ def create(cfg: object) -> GhidraHeadless:
     raw = opts.get("decompile_timeout") or str(DEFAULT_TIMEOUT)
     if not raw.isdigit() or int(raw) <= 0:
         raise RuntimeError(f"[options.ghidra] decompile_timeout must be a positive number of seconds, got {raw!r}")
-    return GhidraHeadless(getattr(cfg, "tools", Path.cwd() / "tools"), maxmem=opts.get("maxmem") or DEFAULT_MAXMEM,
+    maxmem = opts.get("maxmem") or DEFAULT_MAXMEM
+    # JVM -Xmx form; a typo would otherwise only fail (or get a tiny heap) after the JVM starts.
+    if not re.fullmatch(r"[1-9]\d*[MG]", maxmem, re.IGNORECASE):
+        raise RuntimeError(f"[options.ghidra] maxmem must look like 12G or 8192M, got {maxmem!r}")
+    return GhidraHeadless(getattr(cfg, "tools", Path.cwd() / "tools"), maxmem=maxmem,
                           timeout=int(raw))

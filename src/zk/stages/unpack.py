@@ -137,6 +137,17 @@ def extract(apk: Path, dst: Path, force: bool) -> bool:
     return True
 
 
+def remove_orphans(out: Path, stems: set[str]) -> list[str]:
+    """Delete unpacked/<v>/<stem>/ folders whose <stem>.apk is gone, so inventory never reads a stale split."""
+    removed = []
+    for d in sorted(p for p in out.iterdir() if p.is_dir()) if out.is_dir() else []:
+        if d.name not in stems:
+            print(f"[unpack] removing {d}: no {d.name}.apk in raw/")
+            shutil.rmtree(d)
+            removed.append(d.name)
+    return removed
+
+
 def execute(ctx, args: argparse.Namespace) -> dict:
     version = ctx.ws.current_version()
     raw = ctx.ws.dir("raw", version)
@@ -144,6 +155,7 @@ def execute(ctx, args: argparse.Namespace) -> dict:
     if not apks:
         raise RuntimeError(f"no APKs in {raw / 'apk'}: run `zk acquire` first")
     out = ctx.ws.dir("unpacked", version)
+    removed = remove_orphans(out, {apk.stem for apk in apks})
     extracted = []
     for apk in apks:
         try:
@@ -155,4 +167,4 @@ def execute(ctx, args: argparse.Namespace) -> dict:
     metadata_version = inv["metadata"]["version"] if inv["metadata"] else None
     ctx.ws.record_facts({"unity_version": inv["unity_version"], "metadata_version": metadata_version,
                          "backend": inv["backend"], "abis": inv["abis"]})
-    return {"version": version, "extracted": extracted, "path": str(out), **inv}
+    return {"version": version, "extracted": extracted, "removed": removed, "path": str(out), **inv}

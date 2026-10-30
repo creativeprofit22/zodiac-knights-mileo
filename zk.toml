@@ -22,6 +22,7 @@ video_encoder = "ffmpeg"         # only `zk video --encode`; ffmpeg must be on P
 # version = "0.4.6-17"      # label the folder has no device to ask for
 
 # Headless Ghidra: heap and per-function decompiler timeout (default 30 s; slow functions need more).
+# maxmem uses the JVM -Xmx form: a positive whole number + M or G, e.g. "12G" or "8192M".
 [options.ghidra]
 maxmem = "12G"
 decompile_timeout = "300"

@@ -11,11 +11,11 @@ import shutil
 from collections import Counter
 from pathlib import Path
 
+from zk.formats.csharp_dump_diff import compare, tag_used
 from zk.formats.unity_serialized import managed_reference_types
 from zk.ports import PORTS
-from zk.stages._unpack import unpack_inputs
+from zk.stages._unpack import add_abi_argument, check_code_record, resolve_abi, unpack_inputs
 from zk.stages.assets import _export, _known, _scene, _unity
-from zk.stages.assets._compare import compare, tag_used
 
 NAME = "assets"
 PACKAGES: tuple[str, ...] = ("UnityPy",)  # pip dists whose version is part of the update fingerprint
@@ -28,7 +28,7 @@ BUILTIN_FILES = ("unity default resources", "unity_builtin_extra")
 
 
 def add_arguments(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--abi", default="arm64-v8a", help="libil2cpp.so passed to type_info (default: arm64-v8a)")
+    add_abi_argument(p, "libil2cpp.so passed to type_info")
     p.add_argument("--force", action="store_true", help="delete assets/<v>/ and types/<v>/ and export again")
     p.add_argument("--only", nargs="+", choices=CHOICES, metavar="TYPE",
                    help=f"export only these ({', '.join(CHOICES)})")
@@ -87,16 +87,15 @@ def _mb_section(entries: dict[str, dict]) -> dict:
 
 def execute(ctx, args: argparse.Namespace) -> dict:
     version = ctx.ws.current_version()
-    binary, metadata, game = unpack_inputs(ctx, version, args.abi)
-    code = ctx.ws.manifest().get("code")
-    if not code or code.get("version") != version:
-        raise RuntimeError(f"no code record for {version}: run `zk code` first")
-    unity_version = str(ctx.ws.fact("unity_version"))
+    abi = resolve_abi(ctx, version, args.abi)
+    binary, metadata, game = unpack_inputs(ctx, version, abi)
+    check_code_record(ctx, version, abi, f"il2cpp/{version}/")
+    unity_version = ctx.ws.fact("unity_version")
     data_dir = _data_dir(metadata)
     il2cpp = ctx.ws.dir("il2cpp", version)
     PORTS["il2cpp_dump"].contract.verify(il2cpp)
     cc_path = il2cpp / "crosscheck" / "summary.json"
-    if not cc_path.is_file():
+    if ctx.ws.manifest()["code"].get("crosscheck") is None or not cc_path.is_file():
         raise RuntimeError(f"{cc_path} is missing: run `zk code` without --skip-crosscheck")
     summary = _read_json(il2cpp / "summary.json")
     out, types_dir = ctx.ws.dir("assets", version), ctx.ws.dir("types", version)

@@ -34,6 +34,9 @@ class FolderSource:
     def pull(self, package: str, dest: Path) -> dict:
         src = self._source()
         dest = Path(dest)
+        apk_dir, staging = dest / "apk", dest / ".apk.partial"
+        if staging.exists():  # left by an interrupted pull; never part of the source
+            shutil.rmtree(staging)
         if src.is_file():
             if src.suffix.lower() != ".apk":
                 raise RuntimeError(f"{src} is not an .apk file")
@@ -45,9 +48,18 @@ class FolderSource:
             raise RuntimeError(f"no base.apk found in {src}" if apks else f"no .apk found in {src}")
         if len(set(t for _, t in plan)) != len(plan):
             raise RuntimeError(f"{src} holds several files that map to the same destination (duplicate APK names?)")
-        for f, target in plan:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(f, target)
+        # APKs go to a staging folder swapped into apk/ only on success, so a re-pull drops stale splits
+        try:
+            for f, target in plan:
+                out = staging / target.name if target.parent == apk_dir else target
+                out.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(f, out)
+        except OSError:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise
+        if apk_dir.exists():
+            shutil.rmtree(apk_dir)
+        staging.rename(apk_dir)
         obb = any(t.parent.name == "obb" and t.parent.parent == dest for _, t in plan)
         data = any(t.is_relative_to(dest / "data") for _, t in plan)
         return {"pulled": {"apk": apks, "obb": obb, "data": data}, "source": str(src)}

@@ -8,7 +8,7 @@ Export every asset in `assets/bin/Data`. Textures and sprites become PNG, audio 
 ## Inputs
 - `unpacked/<v>/…/assets/bin/Data` (found next to the unpack record's `global-metadata.dat`), plus `libil2cpp.so` for `--abi`.
 - The `unity_version` game fact (e.g. `6000.3.2f1`) is passed to `type_info`. No version is hard-coded.
-- `il2cpp/<v>/` (the `il2cpp_dump` contract) and `il2cpp/<v>/crosscheck/summary.json`. Run `zk code` without `--skip-crosscheck` first.
+- `il2cpp/<v>/` (the `il2cpp_dump` contract) and `il2cpp/<v>/crosscheck/summary.json`, and a `code` record whose `crosscheck` is not `null`. Run `zk code` without `--skip-crosscheck` first.
 - Ports: `type_info`. Unity files are read in-process with UnityPy 1.25.4 (MIT, the optional `assets` extra), imported only by `_unity.py` ([ADR 0006](../adr/0006-type-info-v2.md)).
 
 ## Outputs
@@ -49,7 +49,7 @@ Manifest record: version, unity_version, inventory, exported, misses, monobehavi
 ## Arguments
 | flag | default | meaning |
 |---|---|---|
-| `--abi` | `arm64-v8a` | `libil2cpp.so` passed to `type_info` |
+| `--abi` | the device ABI (`acquire` `abi`) if unpacked, else `arm64-v8a`, else the only unpacked ABI | `libil2cpp.so` passed to `type_info` |
 | `--force` | off | delete `assets/<v>/` and `types/<v>/` and export again |
 | `--only` | all | any of `AudioClip Font MonoBehaviour Shader Sprite TextAsset Texture2D scene` |
 | `--limit` | 0 (all) | export at most N objects this run |
@@ -57,7 +57,7 @@ Manifest record: version, unity_version, inventory, exported, misses, monobehavi
 ## Failure modes
 All of these raise `RuntimeError` (exit 2):
 - There is no unpack or code record for the version, or Data doesn't look like `assets/bin/Data`.
-- `il2cpp/<v>/crosscheck/summary.json` is missing: run `zk code` without `--skip-crosscheck`.
+- The code record's `crosscheck` is `null`, or `il2cpp/<v>/crosscheck/summary.json` is missing: run `zk code` without `--skip-crosscheck`.
 - UnityPy or TypeTreeGeneratorAPI is not installed: `pip install -e ".[assets]"`.
 - Unexplained MonoBehaviour failures or unexplained crosscheck differences remain. `report.json` is still written; nothing is recorded.
 

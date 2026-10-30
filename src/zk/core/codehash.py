@@ -122,6 +122,14 @@ def _package_version(dist: str) -> str:
         return "missing"
 
 
+def unfingerprinted_options(ports: Iterable[str], cfg: object) -> dict[str, frozenset[str]]:
+    """Option keys each port's adapter declares in `UNFINGERPRINTED_OPTIONS` (no effect on its output)."""
+    from zk.core import adapters
+
+    return {port: frozenset(getattr(adapters.load_module(port, cfg), "UNFINGERPRINTED_OPTIONS", ()))
+            for port in sorted(set(ports))}
+
+
 def fingerprint_parts(stage: ModuleType, ports: Iterable[str], cfg: object) -> dict:
     """What a stage result depends on besides its inputs: code, chosen adapters, their pins, packages, options.
 
@@ -138,8 +146,10 @@ def fingerprint_parts(stage: ModuleType, ports: Iterable[str], cfg: object) -> d
         tool = pins.TOOLS.get(name)
         tools[name] = f"{tool.version} {tool.sha256}" if tool else "unknown"
     options = getattr(cfg, "options", {})
+    ignored = {port: frozenset(getattr(m, "UNFINGERPRINTED_OPTIONS", ())) for port, m in mods.items()}
     return {"code_hash": code_hash(sources),
             "adapters": {port: getattr(cfg, "adapters", {})[port] for port in mods},
             "tools": tools,
             "packages": {p: _package_version(p) for p in packages},
-            "options": {port: dict(sorted(options.get(port, {}).items())) for port in mods}}
+            "options": {port: {k: v for k, v in sorted(options.get(port, {}).items()) if k not in ignored[port]}
+                        for port in mods}}

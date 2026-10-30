@@ -138,3 +138,11 @@ def test_ilspycmd_exit_70_without_error_summary_raises(tmp_path):
     run = Runner(_ilspy_output, 70, "crash")
     with pytest.raises(RuntimeError, match="ilspycmd failed on Game"):
         ilspycmd.IlSpyCmd(tmp_path, run, _locate).decompile(_assemblies(tmp_path), ["Game"], tmp_path / "out")
+
+
+@pytest.mark.parametrize("unity", ["", None])
+def test_cpp2il_rejects_missing_unity_version(tmp_path, unity):
+    def run(cmd, **kw):
+        raise AssertionError("Cpp2IL must not run without a Unity version")
+    with pytest.raises(RuntimeError, match="Unity version"):
+        cpp2il.Cpp2Il(tmp_path, run, _locate).build(Path("a"), Path("b"), unity, tmp_path / "out")

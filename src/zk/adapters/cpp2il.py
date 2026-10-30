@@ -35,6 +35,8 @@ class Cpp2Il:
         self.locate = locate
 
     def build(self, binary: Path, metadata: Path, unity_version: str, out: Path) -> dict:
+        if not unity_version:
+            raise RuntimeError("Cpp2IL needs the game's Unity version, but none was given")
         out = Path(out)
         out.mkdir(parents=True, exist_ok=True)
         # stale DLLs from an earlier run would hide a failed build

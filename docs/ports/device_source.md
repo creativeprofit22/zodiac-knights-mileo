@@ -34,7 +34,7 @@ class DeviceSource(Protocol):
   - more than one device is ready and `ANDROID_SERIAL` is unset. The chosen serial is passed to every later adb call as `-s <serial>`.
 
   It then checks `pm list packages`, reads `versionName` and `versionCode` from `dumpsys package <pkg>`, and gets the ABI from `getprop ro.product.cpu.abi`.
-- `pull` copies every split listed by `pm path <pkg>` into `apk/`. It then tries `/sdcard/Android/obb/<pkg>` into `obb/` and `/sdcard/Android/data/<pkg>` into `data/`. If either pull fails, it logs the failure, records `false` and carries on.
+- `pull` copies every split listed by `pm path <pkg>` into a staging folder `.apk.partial/`, then swaps it in as `apk/` once every split has arrived. A re-pull therefore drops splits that are no longer installed, and a failed pull keeps the previous `apk/`. It then tries `/sdcard/Android/obb/<pkg>` into `obb/` and `/sdcard/Android/data/<pkg>` into `data/`. If either pull fails, it logs the failure, records `false` and carries on.
 - adb is found by `zk.core.toolchain.adb()` (on Windows, `%LOCALAPPDATA%/Android/Sdk/platform-tools`). It is run through Python `subprocess` with native paths, so Git Bash path conversion never applies. To run `adb pull` by hand in Git Bash, set `MSYS_NO_PATHCONV=1` and use Windows-style destination paths.
 
 ### `folder`
@@ -52,6 +52,7 @@ version = "0.4.6-17"    # required: there is no device to ask
   - `*.apk` goes to `apk/`;
   - `*.obb` goes to `obb/`;
   - everything else goes to `data/<relative path>`. A leading `apk/`, `obb/` or `data/` folder is dropped, so a folder already in `raw/<v>/` layout keeps its shape.
+- APKs are copied into a staging folder `.apk.partial/` that replaces `apk/` only when every copy succeeded, so a re-pull drops APKs no longer in the source and a failed pull keeps the previous `apk/`.
 - It raises `RuntimeError` when:
   - `path` or `version` is missing;
   - the path does not exist;

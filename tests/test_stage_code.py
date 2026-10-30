@@ -90,3 +90,45 @@ def test_code_needs_unpack(tmp_path, capsys):
     assert cli.main(["--config", str(cfg), "acquire"]) == 0
     assert cli.main(["--config", str(cfg), "code"]) == 2
     assert "run `zk unpack` first" in capsys.readouterr().err
+
+
+def test_skip_crosscheck_removes_earlier_crosscheck(tmp_path):
+    cfg = _unpacked(tmp_path)
+    assert cli.main(["--config", str(cfg), "code"]) == 0
+    out = tmp_path / "ws" / "il2cpp" / "0.4.6-17"
+    assert (out / "crosscheck").is_dir() and (out / "crosscheck.json").is_file()
+    assert cli.main(["--config", str(cfg), "code", "--skip-crosscheck"]) == 0
+    assert not (out / "crosscheck").exists() and not (out / "crosscheck.json").exists()
+    assert _manifest(tmp_path)["code"]["crosscheck"] is None
+
+
+def _with_device_abi(cfg, abi):
+    cfg.write_text(cfg.read_text(encoding="utf-8") + f'[options.device_source]\nabi = "{abi}"\n', encoding="utf-8")
+    return cfg
+
+
+def test_code_defaults_to_the_device_abi(tmp_path, capsys):
+    cfg = _with_device_abi(_config(tmp_path), "x86_64")
+    assert cli.main(["--config", str(cfg), "acquire"]) == 0
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    assert cli.main(["--config", str(cfg), "code", "--skip-java"]) == 0
+    assert _manifest(tmp_path)["code"]["abi"] == "x86_64"
+    assert "(x86_64)" in capsys.readouterr().out
+    assert cli.main(["--config", str(cfg), "code", "--skip-java", "--abi", "armeabi-v7a"]) == 0
+    assert _manifest(tmp_path)["code"]["abi"] == "armeabi-v7a"
+
+
+def test_code_falls_back_to_arm64_without_a_device_abi(tmp_path):
+    from tests.fakes import fake_device
+    apk = tmp_path / "import" / "game.apk"
+    apk.parent.mkdir(parents=True)
+    fake_device.write_apk(apk, fake_device.apk_files())
+    cfg = _config(tmp_path)
+    text = cfg.read_text(encoding="utf-8").replace('"tests.fakes.fake_device"', '"folder"')
+    path = str(apk).replace("\\", "/")
+    cfg.write_text(text + f'[options.device_source]\npath = "{path}"\nversion = "0.4.6-17"\n', encoding="utf-8")
+    assert cli.main(["--config", str(cfg), "acquire"]) == 0
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    assert _manifest(tmp_path)["acquire"]["abi"] is None
+    assert cli.main(["--config", str(cfg), "code", "--skip-java"]) == 0
+    assert _manifest(tmp_path)["code"]["abi"] == "arm64-v8a"

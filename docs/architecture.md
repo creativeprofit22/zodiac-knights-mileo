@@ -19,7 +19,9 @@ src/zk/
   ports/       one module per port: PORT name, runtime_checkable Protocol, CONTRACT; PORTS registry
   adapters/    one module or package per tool, e.g. adapters/jadx.py; chosen in zk.toml
   stages/      one module or package per stage; STAGE_MODULES registry
+    _unpack.py     shared stage glue: unpack record lookup, code record ABI check, --abi option
   formats/     pure parsers: bytes in, data out
+    csharp_dump_diff.py  per-assembly diff of two csharp_dump summaries (used by code and assets)
   steps.py     the `zk update` plan as data: one Step per stage
   update.py    `zk update` orchestrator (no stage knowledge)
   cli.py       `zk status`, `zk tools`, `zk update`, `zk <stage>`
@@ -37,12 +39,12 @@ device ─device_source (acquire)─▶ raw/<v>/apk/base.apk ─unpack─▶ unp
    il2cpp + MonoBehaviour classes ─type_info──▶ types/<v>/ (nodes.json)
    lib + il2cpp ─ghidra──▶ ghidra/<v>/   (project/, functions/<Ns>/<Class>.c, index.json)  zk ghidra
    unpacked Data + types ─(UnityPy)──▶ assets/<v>/ (PNG, WAV, fonts, text, shaders.json, MonoBehaviour JSON, scenes)  zk assets
-   unpacked assets/Video (.rgbv, .mp4, manifest.json) ──▶ assets/<v>/video/ (frames, report.json)  zk video
-   video frames ─video_encoder (--encode)──▶ assets/<v>/video/<clip>/encoded.mp4
+   unpacked assets/Video (.rgbv, .mp4, manifest.json) ──▶ video/<v>/ (frames, report.json)  zk video
+   video frames ─video_encoder (--encode)──▶ video/<v>/<clip>/encoded.mp4
    formats parse raw/unpacked bytes ──▶ data/<v>/
 ```
 
-Workspace areas (`zk.core.workspace.STAGE_DIRS`): `raw`, `unpacked`, `il2cpp`, `code`, `csharp`, `types`, `ghidra`, `assets`, `data`. Each one is created on demand as `workspace/<area>/<version>/`.
+Workspace areas (`zk.core.workspace.STAGE_DIRS`): `raw`, `unpacked`, `il2cpp`, `code`, `csharp`, `types`, `ghidra`, `assets`, `video`, `data`. Each one is created on demand as `workspace/<area>/<version>/`.
 
 ## Manifest
 
@@ -67,12 +69,13 @@ Workspace areas (`zk.core.workspace.STAGE_DIRS`): `raw`, `unpacked`, `il2cpp`, `
 `zk update [--from STEP] [--force] [--dry-run]` runs every stage in order, skipping the ones that are current ([runbook](runbook.md) for day-to-day use). Modelled on SSA's `update.py`.
 
 - **Steps are data.** `zk.steps.STEPS` declares what each step `uses` from its upstream steps (`Uses`: files, bulk trees and manifest record values; `Step.after` is derived from it), outputs, `--force` argv, report fields, checks, warnings and time estimate. `zk.update` reads only those fields and holds no stage names (a test checks this). A stage that reads an upstream output must declare it in `uses`, or update may wrongly skip it.
-- **Fingerprint parts** (`codehash.fingerprint_parts`): the code hash, the adapter chosen for each port the stage used, the pinned tools those adapters (and the stage) list in `PINNED` with version and sha256, the versions of pip packages listed in `PACKAGES`, and the `[options.<port>]` values of those ports. Adapter modules are loaded, never created, so planning touches no device and downloads nothing. Because pins reach a step only through `PINNED`, bumping `jadx` reruns `code` but not `ghidra`.
+- **Fingerprint parts** (`codehash.fingerprint_parts`): the code hash, the adapter chosen for each port the stage used, the pinned tools those adapters (and the stage) list in `PINNED` with version and sha256, the versions of pip packages listed in `PACKAGES`, and the `[options.<port>]` values of those ports, minus the keys an adapter lists in `UNFINGERPRINTED_OPTIONS` because they don't change its output (ghidra: `maxmem`, the JVM heap; `decompile_timeout` stays, since it decides which functions time out). Such values are still recorded in the stage result (ghidra's `analysis.maxmem`), so runs stay traceable. A stamp written before a key was declared unfingerprinted still matches: update drops that key from the stored parts before comparing and rewrites the stamp on the skip, so there is no one-off rerun. Adapter modules are loaded, never created, so planning touches no device and downloads nothing. Because pins reach a step only through `PINNED`, bumping `jadx` reruns `code` but not `ghidra`.
 - **Inputs**: game version, the step's argv, and `consumed`: digests of what it uses from each upstream. Files get a content sha256; bulk trees (`assets/bin/Data`, `assets/Video`) get a size+mtime manifest, since they only change when unpack reruns. Each stamp keeps a `file_cache` (`{path: [size, mtime_ns, sha256]}`), so a file whose size and mtime are unchanged is not read again, and each file is hashed at most once per run. So a step reruns after an upstream only if what it consumes changed: a code-only fix that rewrites identical `script.json` and `il2cpp.h` doesn't rerun ghidra.
 - **Current** means the record has an `update_stamp` whose parts and inputs match and every declared output exists. Otherwise the step runs, and the plan says why (`no stamp`, `code changed`, `adapter ghidra: a->b`, `pinned tool jadx 1.5.5->1.5.6`, `option ghidra.decompile_timeout changed`, `version a->b`, `code output il2cpp/<v>/il2cpp.h changed`, `missing ghidra/<v>/index.json`, `--force`). Each step is decided just before it would run, after its upstreams ran. A dry run can't know yet, so a step whose only trigger is an upstream that will run shows `maybe` (`reruns if code output changes`).
 - **Stamp**: after a step succeeds, `update_stamp = {fingerprint, parts, inputs, result, seconds, at, file_cache}` is written into its record; `file_cache` is present only for steps that consume files. `fingerprint = sha256(parts + inputs + result keys)`, so `file_cache` is not part of it. Stamps written before `consumed` existed (inputs hold `upstream` fingerprints) are adopted without a rerun when the old rule still holds (parts, version and argv unchanged, outputs present, upstream fingerprints unchanged, no upstream rerunning); a real run then rewrites them in the new format. A manual `zk <stage>` drops the stamp, and so does a failure.
+- **Force on rerun**: every rerun of a non-source step passes its `force_argv`, so stale outputs on disk are never stamped as current. A step without a stamp (failed or manual run) is forced too, and its plan line says `forced: no stamp, inputs may have changed`, since update can't tell what the outputs were built from. The one exception is a step marked `resumable` in `zk.steps` (`assets`, whose export index is keyed `<file>:<path_id>`; `ghidra`, which resumes via `.part` files): when the last `update` report row for it is `failed` and its parts and inputs still match the fingerprint stored in that row (`resume`), it reruns without `--force` and continues where it stopped (`resumes its failed run (inputs unchanged)`). Any change since the failure (code, adapter, pin, option, version, argv, consumed files) forces it.
 - **Source step** (`acquire`): always runs, since only the device knows its version; it counts as skipped when its result (`version`, `base_apk`) is unchanged. A dry run doesn't ask the device and plans downstream steps as if the source were unchanged.
-- **Failure**: stops at the first failing step, prints `rerun: zk <step> ...` and `resume: zk update --from <step>`, marks later steps `not run` and exits 2.
+- **Failure**: stops at the first failing step, prints `rerun: zk <step> ...` and `resume: zk update --from <step>`, marks later steps `not run` and exits 2. A failed `resumable` step's report row keeps `resume = {ports, fingerprint}` (parts and inputs of the failed run) for the force decision above.
 - **Report**: version, start time, totals, one row per step (status, reason, seconds, counts), checks and warnings. Printed once at the end and stored in the manifest under `update`.
 
 ## Adapter selection

@@ -1,4 +1,4 @@
-from zk.stages.assets._compare import compare, tag_used
+from zk.formats.csharp_dump_diff import compare, tag_used
 
 
 def _summary(classes):

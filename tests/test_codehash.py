@@ -39,7 +39,7 @@ def test_in_tree_keys_relative_to_src():
 def test_closure_follows_cross_stage_imports():
     import zk.stages.code
     src = stage_sources(("zk.stages.code", zk.stages.code.__file__))
-    assert {"zk/stages/code.py", "zk/stages/_unpack.py", "zk/stages/assets/_compare.py",
+    assert {"zk/stages/code.py", "zk/stages/_unpack.py", "zk/formats/csharp_dump_diff.py",
             "zk/ports/__init__.py", "zk/ports/il2cpp_dump.py", "zk/core/contracts.py"} <= src.keys()
     # only what it imports: no other stage, no unrelated format, no stages/__init__.py
     assert not {"zk/stages/ghidra.py", "zk/formats/rgbv.py", "zk/stages/__init__.py"} & src.keys()
@@ -91,7 +91,7 @@ def test_ghidra_adapter_hashes_its_java_scripts():
 
 
 def _cfg(**adapters: str) -> Config:
-    return Config(adapters=adapters, options={"ghidra": {"maxmem": "4G"}})
+    return Config(adapters=adapters, options={"ghidra": {"maxmem": "4G", "decompile_timeout": "300"}})
 
 
 def test_fingerprint_parts_lists_adapter_pins_and_options():
@@ -100,7 +100,7 @@ def test_fingerprint_parts_lists_adapter_pins_and_options():
     assert parts["adapters"] == {"ghidra": "ghidra"}
     assert set(parts["tools"]) == {"ghidra", "jdk25"}
     assert parts["tools"]["ghidra"].startswith("12.2 ")
-    assert parts["options"] == {"ghidra": {"maxmem": "4G"}}
+    assert parts["options"] == {"ghidra": {"decompile_timeout": "300"}}  # maxmem is UNFINGERPRINTED_OPTIONS
     assert parts["packages"] == {}
 
 
@@ -126,3 +126,13 @@ def test_pin_bump_changes_only_adapters_that_declare_it(monkeypatch):
     monkeypatch.setattr(pins, "TOOLS", bumped)
     assert fingerprint_parts(zk.stages.ghidra, ["ghidra"], cfg) == g0
     assert fingerprint_parts(zk.stages.code, ["java_decompiler"], cfg)["tools"] != c0["tools"]
+
+
+def test_fingerprint_parts_omits_unfingerprinted_options_of_that_port_only():
+    import zk.stages.ghidra
+    from zk.core.codehash import unfingerprinted_options
+    cfg = _cfg(ghidra="ghidra")
+    cfg.options["other"] = {"maxmem": "1G"}
+    parts = fingerprint_parts(zk.stages.ghidra, ["ghidra"], cfg)
+    assert "maxmem" not in parts["options"]["ghidra"]
+    assert unfingerprinted_options(["ghidra"], cfg) == {"ghidra": frozenset({"maxmem"})}

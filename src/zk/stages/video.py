@@ -1,7 +1,7 @@
 """video: export the frames of each .rgbv clip and check every clip against assets/Video/manifest.json.
 
 Input: the unpacked assets/Video/ folder (<clip>.mp4, <clip>.rgbv, manifest.json) recorded by `zk unpack`.
-Output: assets/<version>/video/<clip>/frame_NNNN.jpg + index.json, and assets/<version>/video/report.json.
+Output: video/<version>/<clip>/frame_NNNN.jpg + index.json, and video/<version>/report.json.
 A manifest that disagrees with the shipped files is a finding in the report, never a stage failure.
 """
 from __future__ import annotations
@@ -116,7 +116,7 @@ def execute(ctx, args: argparse.Namespace) -> dict:
     expected = {Path(c.name).stem: c for c in manifest.clips}
     mp4s = {p.stem: p for p in vdir.glob("*.mp4")}
     rgbvs = {p.stem: p for p in vdir.glob("*.rgbv")}
-    out = ctx.ws.dir("assets", version, "video")
+    out = ctx.ws.dir("video", version)
     encoder = ctx.adapter("video_encoder") if args.encode else None
 
     clips: list[dict] = []
@@ -145,12 +145,13 @@ def execute(ctx, args: argparse.Namespace) -> dict:
             target = out / name / OUTPUT
             # a zero-byte file is what a killed encoder leaves behind, so it is not a finished encode
             if target.is_file() and target.stat().st_size > 0 and not args.force:
+                encoded[name] = {"skipped": True, "output": str(target), "bytes": target.stat().st_size}
                 continue
             encoded[name] = encoder.encode(out / name, idx["fps"], target)
             verify_output(target)
 
     report = {"version": version, "manifest_version": manifest.version, "source": str(vdir),
-              "mismatches": mismatches, "clips": clips}
+              "mismatches": mismatches, "clips": clips, "encoded": encoded}
     (out / REPORT).write_text(json.dumps(report, indent=2), encoding="utf-8")
     if mismatches:
         print(f"[video] {mismatches} manifest mismatch(es); see {out / REPORT}")

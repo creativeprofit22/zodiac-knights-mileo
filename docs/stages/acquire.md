@@ -17,7 +17,7 @@ Gets the installed game into `raw/<version>/` through the [`device_source`](../p
 |---|---|
 | `package` | Android package |
 | `version` | `versionName-versionCode` label from `identify` |
-| `abi` | device primary ABI (`null` for `folder`) |
+| `abi` | device primary ABI (`null` for `folder`); `code`, `csharp`, `ghidra` and `assets` default `--abi` to it, and `zk update` reruns them when it changes |
 | `pulled` | adapter's `{"apk": [...], "obb": bool, "data": bool}`, or `false` when the pull was skipped |
 | `base_apk` | `{"sha256", "bytes"}` of `apk/base.apk` (streamed hash) |
 | `path` | absolute `raw/<version>/` folder |

@@ -32,7 +32,7 @@ Produces a browsable C# project for each game assembly (namespaces, classes, fie
 ## Arguments
 | flag | default | meaning |
 |---|---|---|
-| `--abi` | `arm64-v8a` | which `libil2cpp.so` to read |
+| `--abi` | the device ABI (`acquire` `abi`) if unpacked, else `arm64-v8a`, else the only unpacked ABI | which `libil2cpp.so` to read |
 | `--input` | `cpp2il` | `cpp2il`: build assemblies from binary + metadata; `dummydll`: reuse `il2cpp/<v>/DummyDll/` |
 | `--force` | off | delete `csharp/<v>/` and rerun |
 

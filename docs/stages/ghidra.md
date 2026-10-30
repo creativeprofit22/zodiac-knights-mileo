@@ -57,13 +57,13 @@ With `--skip-analysis` the saved project is opened read-only (`-process -noanaly
 ## Arguments
 | flag | default | meaning |
 |---|---|---|
-| `--abi` | `arm64-v8a` | which `libil2cpp.so`; must match the `zk code` ABI |
+| `--abi` | the device ABI (`acquire` `abi`) if unpacked, else `arm64-v8a`, else the only unpacked ABI | which `libil2cpp.so`; must match the `zk code` ABI |
 | `--skip-analysis` | off | reuse `project/libil2cpp.gpr` and only export missing `.c` files |
 | `--filter` | none | only classes whose `Namespace.Class` matches the regex |
 | `--limit` | none | only the first N classes (sorted) |
 | `--force` | off | delete `ghidra/<v>/`, including the project, and rerun |
 
-Config in `zk.toml`, `[options.ghidra]`: `maxmem` (default `"12G"`) sets the headless heap (`GHIDRA_HEADLESS_MAXMEM`); `decompile_timeout` (seconds, default `"30"`, this repo sets `"300"`) is the per-function decompiler limit passed to `Il2CppExport.java`.
+Config in `zk.toml`, `[options.ghidra]`: `maxmem` (default `"12G"`) sets the headless heap (`GHIDRA_HEADLESS_MAXMEM`) and must use the JVM `-Xmx` form, a positive whole number followed by `M` or `G` (e.g. `"12G"`, `"8192M"`; checked before Ghidra starts); `decompile_timeout` (seconds, default `"30"`, this repo sets `"300"`) is the per-function decompiler limit passed to `Il2CppExport.java`.
 
 To re-export one class, delete its `.c` file and run `zk ghidra --skip-analysis`.
 

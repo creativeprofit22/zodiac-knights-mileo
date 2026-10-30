@@ -11,15 +11,18 @@ Export every `.rgbv` clip's frames as JPEGs and check each clip against the game
 - Port `video_encoder`, only with `--encode`
 
 ## Outputs
-- `assets/<v>/video/<clip>/frame_NNNN.jpg`: the `.rgbv` JPEG bytes, unchanged
-- `assets/<v>/video/<clip>/index.json`: `source`, `fps`, `frames`, `width`, `height`, `uniform_size`; written last, so its presence means the clip is complete
-- `assets/<v>/video/<clip>/encoded.mp4` with `--encode`
-- `assets/<v>/video/report.json`: per clip, a list of checks `{field, expected, actual, ok}`:
+- `video/<v>/<clip>/frame_NNNN.jpg`: the `.rgbv` JPEG bytes, unchanged
+- `video/<v>/<clip>/index.json`: `source`, `fps`, `frames`, `width`, `height`, `uniform_size`; written last, so its presence means the clip is complete
+- `video/<v>/<clip>/encoded.mp4` with `--encode`
+- `video/<v>/report.json`: per clip, a list of checks `{field, expected, actual, ok}`:
   - `manifest.present`, `mp4.present`, `rgbv.present` (clips on only one side)
   - `mp4.bytes`, `mp4.sha256`, `mp4.duration`, `mp4.fps`, `mp4.width`, `mp4.height`
   - `rgbv.uniform_size`, `rgbv.fps`, `rgbv.duration` (frames / fps), `rgbv.width`, `rgbv.height`
   - durations match within 0.05 s, fps within 0.01
+  - `encoded`: same as the manifest field below
 - Manifest info: `version`, `path`, `report`, `manifest_version`, `clips`, `exported`, `frames`, `mismatches`, `mismatched_clips`, `encoded`
+
+`encoded` maps each clip encoded with `--encode` to the encoder's result (`{}` without `--encode`). A clip whose non-empty `encoded.mp4` already exists is not re-encoded without `--force` and is recorded as `{skipped: true, output, bytes}`, so a rerun keeps every encode in the record.
 
 Mismatches are findings: they are counted and listed but never fail the stage.
 

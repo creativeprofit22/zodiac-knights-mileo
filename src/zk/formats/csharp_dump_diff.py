@@ -1,6 +1,6 @@
 """Compare two csharp_dump summaries per assembly; tag each difference by whether MonoBehaviours use the class.
 
-`compare` is the plain per-assembly diff the code stage records. `tag_used` adds, per assembly, which differing classes
+Pure data in, data out. `compare` is the plain per-assembly diff the code stage records. `tag_used` adds, per assembly, which differing classes
 are used (in the MonoBehaviour class set), which match a known counting rule, and what stays unexplained.
 """
 from __future__ import annotations

@@ -1,8 +1,10 @@
 """Fake device_source adapter: 'pulls' a synthetic Unity 6 IL2CPP APK (no game data).
 
 The version label comes from [options.device_source] version, so tests can feed bad labels.
+`abi` is the reported primary ABI; `split_abi` moves that ABI's lib/ folder into split_config.<abi>.apk, as Play splits do.
 """
 import json
+import shutil
 import struct
 import zipfile
 
@@ -53,27 +55,45 @@ def apk_files(metadata_version=39, unity=UNITY):
     return files
 
 
+def split_name(abi):
+    return f"split_config.{abi.replace('-', '_')}.apk"
+
+
+def write_apk(path, files):
+    with zipfile.ZipFile(path, "w") as z:
+        for name, data in sorted(files.items()):
+            # fixed timestamp: a re-pull must give identical bytes
+            z.writestr(zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0)), data)
+
+
 class FakeDevice:
-    def __init__(self, version, metadata_version, unity=UNITY):
+    def __init__(self, version, metadata_version, unity=UNITY, split_abi="", abi="arm64-v8a"):
         self.version = version
         self.metadata_version = metadata_version
         self.unity = unity
+        self.split_abi = split_abi
+        self.abi = abi
         self.pulls = 0
 
     def identify(self, package):
-        return {"package": package, "version": self.version, "abi": "arm64-v8a"}
+        return {"package": package, "version": self.version, "abi": self.abi}
 
     def pull(self, package, dest):
         self.pulls += 1
-        (dest / "apk").mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(dest / "apk" / "base.apk", "w") as z:
-            for name, data in sorted(apk_files(self.metadata_version, self.unity).items()):
-                # fixed timestamp: a re-pull must give identical bytes
-                z.writestr(zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0)), data)
-        return {"pulled": {"apk": ["base.apk"], "obb": False, "data": False}}
+        if (dest / "apk").exists():  # like the real adapters: a pull replaces apk/
+            shutil.rmtree(dest / "apk")
+        (dest / "apk").mkdir(parents=True)
+        apks: dict[str, dict] = {"base.apk": {}}
+        prefix = f"lib/{self.split_abi}/"
+        split = split_name(self.split_abi) if self.split_abi else None
+        for name, data in apk_files(self.metadata_version, self.unity).items():
+            apks.setdefault(split if split and name.startswith(prefix) else "base.apk", {})[name] = data
+        for apk, files in sorted(apks.items()):
+            write_apk(dest / "apk" / apk, files)
+        return {"pulled": {"apk": sorted(apks), "obb": False, "data": False}}
 
 
 def create(cfg):
     opts = cfg.options.get(PORT, {})
     return FakeDevice(opts.get("version", "0.4.6-17"), int(opts.get("metadata_version", "39")),
-                      opts.get("unity_version", UNITY))
+                      opts.get("unity_version", UNITY), opts.get("split_abi", ""), opts.get("abi", "arm64-v8a"))

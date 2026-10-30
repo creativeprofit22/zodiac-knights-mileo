@@ -102,3 +102,33 @@ def test_unknown_unity_version_is_a_warning(tmp_path):
     u = _manifest(tmp_path)["unpack"]
     assert u["unity_version"] == "6000.4.0f1"
     assert len(u["warnings"]) == 1 and "Unity version 6000.4.0f1" in u["warnings"][0]
+
+
+def test_split_apk_is_unpacked_and_its_il2cpp_is_found(tmp_path):
+    cfg = _config(tmp_path, split_abi="arm64-v8a")
+    assert cli.main(["--config", str(cfg), "acquire"]) == 0
+    assert _manifest(tmp_path)["acquire"]["pulled"]["apk"] == ["base.apk", "split_config.arm64_v8a.apk"]
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    u = _manifest(tmp_path)["unpack"]
+    assert u["extracted"] == ["base.apk", "split_config.arm64_v8a.apk"]
+    assert u["il2cpp"]["arm64-v8a"] == "split_config.arm64_v8a/lib/arm64-v8a/libil2cpp.so"
+    assert u["il2cpp"]["x86_64"] == "base/lib/x86_64/libil2cpp.so"
+    assert u["abis"] == ["arm64-v8a", "armeabi-v7a", "x86_64"] and u["warnings"] == []
+
+
+def test_orphan_unpacked_folder_is_removed_and_not_inventoried(tmp_path):
+    cfg = _config(tmp_path, split_abi="arm64-v8a")
+    assert cli.main(["--config", str(cfg), "acquire"]) == 0
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    unpacked = tmp_path / "ws" / "unpacked" / "0.4.6-17"
+    assert (unpacked / "split_config.arm64_v8a").is_dir()
+    cfg = _config(tmp_path)  # the split is no longer installed
+    assert cli.main(["--config", str(cfg), "acquire", "--force"]) == 0
+    assert _manifest(tmp_path)["acquire"]["pulled"]["apk"] == ["base.apk"]
+    assert cli.main(["--config", str(cfg), "unpack", "--force"]) == 0
+    u = _manifest(tmp_path)["unpack"]
+    assert u["removed"] == ["split_config.arm64_v8a"] and u["extracted"] == ["base.apk"]
+    assert sorted(p.name for p in unpacked.iterdir()) == ["base"]
+    assert u["il2cpp"]["arm64-v8a"] == "base/lib/arm64-v8a/libil2cpp.so"
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    assert _manifest(tmp_path)["unpack"]["removed"] == []

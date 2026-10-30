@@ -17,7 +17,7 @@ from zk import cli, stages, update
 from zk.core import pins
 from zk.core.context import Context
 from zk.stages import code, csharp
-from zk.stages.assets import _unity
+from zk.stages.assets import _export, _unity
 from zk.steps import STEPS
 
 VERSION = "0.4.6-17"
@@ -208,6 +208,36 @@ def test_option_change_reruns_only_its_step(tmp_path):
     assert _reasons(tmp_path)["csharp"] == "option decompiler.skip changed"
 
 
+
+def test_changed_device_abi_reruns_code_and_abi_consumers(tmp_path):
+    assert _update(_config(tmp_path)) == 0
+    assert _update(_config(tmp_path, {"device_source": {"abi": "x86_64"}})) == 0
+    assert _ran(tmp_path) == ["acquire", "code", "csharp", "ghidra", "assets"]
+    assert _reasons(tmp_path)["code"] == "acquire output abi changed"
+    assert all(_manifest(tmp_path)[s]["abi"] == "x86_64" for s in ("code", "csharp", "ghidra"))
+
+def test_unfingerprinted_option_change_skips_but_output_option_reruns(tmp_path, monkeypatch):
+    monkeypatch.setattr(fake_ghidra, "UNFINGERPRINTED_OPTIONS", ("maxmem",), raising=False)
+    assert _update(_config(tmp_path, {"ghidra": {"maxmem": "4G", "decompile_timeout": "30"}})) == 0
+    assert _update(_config(tmp_path, {"ghidra": {"maxmem": "16G", "decompile_timeout": "30"}})) == 0
+    assert set(_statuses(tmp_path).values()) == {"skipped"}
+    assert _update(_config(tmp_path, {"ghidra": {"maxmem": "16G", "decompile_timeout": "300"}})) == 0
+    assert _ran(tmp_path) == ["ghidra"]
+    assert _reasons(tmp_path)["ghidra"] == "option ghidra.decompile_timeout changed"
+
+
+def test_stamp_that_still_holds_a_now_unfingerprinted_option_is_kept(tmp_path, monkeypatch):
+    cfg = _config(tmp_path, {"ghidra": {"maxmem": "4G"}})
+    assert _update(cfg) == 0
+    assert _manifest(tmp_path)["ghidra"]["update_stamp"]["parts"]["options"] == {"ghidra": {"maxmem": "4G"}}
+    monkeypatch.setattr(fake_ghidra, "UNFINGERPRINTED_OPTIONS", ("maxmem",), raising=False)
+    assert _update(cfg) == 0
+    assert set(_statuses(tmp_path).values()) == {"skipped"}
+    stamp = _manifest(tmp_path)["ghidra"]["update_stamp"]
+    assert stamp["parts"]["options"] == {"ghidra": {}}  # rewritten on skip, no rerun
+    assert _update(cfg) == 0 and set(_statuses(tmp_path).values()) == {"skipped"}
+
+
 def test_pinned_tool_bump_reruns_only_its_step(tmp_path, monkeypatch):
     monkeypatch.setattr(fake_ghidra, "PINNED", ("ghidra",), raising=False)
     cfg = _config(tmp_path)
@@ -246,7 +276,7 @@ def test_failure_stops_with_hints_and_from_resumes(tmp_path, monkeypatch, capsys
     err = capsys.readouterr().err
     prog = f"zk --config {cfg}"
     assert "[update] csharp failed: decompiler exploded" in err
-    assert f"rerun:  {prog} csharp\n" in err and f"resume: {prog} update --from csharp" in err
+    assert f"rerun:  {prog} csharp --force\n" in err and f"resume: {prog} update --from csharp" in err
     assert _statuses(tmp_path) == {"acquire": "ran", "unpack": "ran", "code": "ran", "csharp": "failed",
                                    "ghidra": "not run", "assets": "not run", "video": "not run"}
     assert _reasons(tmp_path)["csharp"] == "RuntimeError: decompiler exploded"
@@ -421,3 +451,84 @@ def test_update_lines_are_flushed(tmp_path, monkeypatch):
     assert _update(_config(tmp_path), "--dry-run") == 0
     lines = [ln for ln in out.getvalue().splitlines() if ln]
     assert lines and out.flushes >= len(lines)
+
+
+def test_changed_split_apk_reruns_unpack(tmp_path):
+    cfg = _config(tmp_path, {"device_source": {"split_abi": "arm64-v8a"}})
+    assert _update(cfg) == 0
+    split = tmp_path / "ws" / "raw" / VERSION / "apk" / fake_device.split_name("arm64-v8a")
+    assert split.is_file()
+    fake_device.write_apk(split, {"lib/arm64-v8a/libil2cpp.so": b"\x7fELF changed"})
+    assert _update(cfg) == 0
+    assert _statuses(tmp_path)["acquire"] == "skipped"  # base.apk is unchanged
+    assert "unpack" in _ran(tmp_path) and "code" in _ran(tmp_path)
+    assert _reasons(tmp_path)["unpack"] == f"acquire output raw/{VERSION}/apk/{split.name} changed"
+    assert _reasons(tmp_path)["code"].startswith(f"acquire output raw/{VERSION}/apk/{split.name} changed")
+    so = tmp_path / "ws" / "unpacked" / VERSION / split.stem / "lib" / "arm64-v8a" / "libil2cpp.so"
+    assert so.read_bytes() == b"\x7fELF changed"
+
+
+# --- when an unstamped step is forced ----------------------------------------------------------------------
+
+def test_manual_unpack_then_new_apk_forces_unpack(tmp_path, capsys):
+    apk = _apk(tmp_path / "import" / "game.apk")
+    opts = {"device_source": {"path": apk.as_posix(), "version": VERSION}}
+    cfg = _config(tmp_path, opts, device_source="folder")
+    assert _update(cfg) == 0
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0  # manual run: no stamp
+    _apk(apk, unity="6000.3.9f1")
+    assert cli.main(["--config", str(cfg), "acquire", "--force"]) == 0  # base.apk sha256 changes
+    capsys.readouterr()
+    assert _update(cfg) == 0
+    out = capsys.readouterr().out
+    line = next(ln for ln in out.splitlines() if ln.startswith("  unpack "))
+    assert line.split()[1] == "run" and update.FORCED in line
+    assert f" unpack --force` ({update.NO_STAMP}; {update.FORCED})" in out
+    assert _manifest(tmp_path)["unpack"]["unity_version"] == "6000.3.9f1"  # not the stale unpacked folder
+
+
+def _count_exports(monkeypatch, fail_at=0):
+    original, calls = _export.export_media, []
+
+    def export_media(obj, root, idx):
+        calls.append(_export.key_of(obj))
+        if len(calls) == fail_at:
+            raise RuntimeError("disk full")
+        return original(obj, root, idx)
+    monkeypatch.setattr(_export, "export_media", export_media)
+    return calls
+
+
+def test_failed_assets_resumes_without_force(tmp_path, monkeypatch, capsys):
+    cfg = _config(tmp_path)
+    with monkeypatch.context() as m:
+        first = _count_exports(m, fail_at=2)
+        assert _update(cfg) == 2
+    assert _statuses(tmp_path)["assets"] == "failed" and len(first) == 2
+    capsys.readouterr()
+
+    calls = _count_exports(monkeypatch)
+    assert _update(cfg, "--from", "assets") == 0
+    out = capsys.readouterr().out
+    plan = next(ln for ln in out.splitlines() if ln.startswith("  assets "))
+    assert update.RESUMES in plan and update.FORCED not in plan
+    assert f" assets` ({update.NO_STAMP}; {update.RESUMES})" in out
+    assert first[0] not in calls and first[1] in calls  # the exported object is kept, the rest resumes
+    assert _statuses(tmp_path)["assets"] == "ran"
+    assert _update(cfg) == 0 and set(_statuses(tmp_path).values()) == {"skipped"}
+
+
+def test_failed_assets_with_changed_code_is_forced(tmp_path, monkeypatch, capsys):
+    cfg = _config(tmp_path)
+    with monkeypatch.context() as m:
+        _count_exports(m, fail_at=2)
+        assert _update(cfg) == 2
+    original = update.fingerprint_parts
+
+    def parts(module, ports, cfg):
+        out = original(module, ports, cfg)
+        return {**out, "code_hash": "changed"} if module.NAME == "assets" else out
+    monkeypatch.setattr(update, "fingerprint_parts", parts)
+    capsys.readouterr()
+    assert _update(cfg, "--from", "assets") == 0
+    assert f" assets --force` ({update.NO_STAMP}; {update.FORCED})" in capsys.readouterr().out

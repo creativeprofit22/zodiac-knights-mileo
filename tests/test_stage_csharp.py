@@ -103,3 +103,14 @@ def test_dummydll_input_rejects_abi_other_than_code_stage(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "'arm64-v8a'" in err and repr(other) in err and f"zk code --abi {other}" in err
     assert "csharp" not in _manifest(tmp_path)
+
+
+def test_cpp2il_input_without_unity_version_fails_cleanly(tmp_path, capsys):
+    cfg = _unpacked(tmp_path)
+    for f in (tmp_path / "ws" / "unpacked").rglob("globalgamemanagers"):
+        f.unlink()
+    assert cli.main(["--config", str(cfg), "unpack"]) == 0
+    assert _manifest(tmp_path)["game"]["unity_version"] is None
+    assert cli.main(["--config", str(cfg), "csharp"]) == 2
+    assert "'unity_version' is unknown" in capsys.readouterr().err
+    assert "csharp" not in _manifest(tmp_path)

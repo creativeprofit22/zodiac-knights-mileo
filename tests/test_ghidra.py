@@ -224,6 +224,25 @@ def test_analyze_fails_on_headless_error_in_this_run(tmp_path):
     assert not (tmp_path / "out" / "index.json").exists()
 
 
+def test_analyze_fails_on_headless_error_only_in_script_log(tmp_path):
+    dump, targets = _inputs(tmp_path)
+    g, _ = _headless(tmp_path)
+    inner = g.run
+
+    def run(cmd, **kw):
+        proc = inner(cmd, **kw)
+        (tmp_path / "out" / "headless.script.log").write_text(
+            "2026-10-29 07:00:00 ERROR (HeadlessAnalyzer) earlier run\n"
+            "2026-10-29 08:00:02 ERROR (HeadlessAnalyzer) REPORT SCRIPT ERROR: Il2CppExport.java : boom\n",
+            encoding="utf-8")
+        return proc
+
+    g.run = run
+    with pytest.raises(RuntimeError, match="1 error.*Il2CppExport.java : boom"):
+        g.analyze(tmp_path / "libil2cpp.so", dump, targets, tmp_path / "out", skip_analysis=False)
+    assert not (tmp_path / "out" / "index.json").exists()
+
+
 def test_analyze_skip_analysis_needs_saved_project(tmp_path):
     dump, targets = _inputs(tmp_path)
     g, calls = _headless(tmp_path)
@@ -267,6 +286,23 @@ def test_create_reads_decompile_timeout_option(tmp_path):
     assert adapter.create(Cfg()).timeout == adapter.DEFAULT_TIMEOUT
     Cfg.options = {"ghidra": {"decompile_timeout": "0"}}
     with pytest.raises(RuntimeError, match="decompile_timeout"):
+        adapter.create(Cfg())
+
+
+@pytest.mark.parametrize("value", ["12G", "8192M"])
+def test_create_accepts_jvm_maxmem(tmp_path, value):
+    class Cfg:
+        tools = tmp_path
+        options = {"ghidra": {"maxmem": value}}
+    assert adapter.create(Cfg()).maxmem == value
+
+
+@pytest.mark.parametrize("value", ["12", "12GB", "-1G"])
+def test_create_rejects_bad_maxmem(tmp_path, value):
+    class Cfg:
+        tools = tmp_path
+        options = {"ghidra": {"maxmem": value}}
+    with pytest.raises(RuntimeError, match="maxmem must look like 12G or 8192M"):
         adapter.create(Cfg())
 
 

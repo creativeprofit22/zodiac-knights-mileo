@@ -8,6 +8,7 @@ workspace/
   types/<version>/     type_info port output (nodes.json)
   ghidra/<version>/    ghidra port output (index.json, functions/, project/)
   assets/<version>/    exported Unity assets
+  video/<version>/     exported .rgbv frames + video report
   data/<version>/      decoded game tables
   manifest.json        "game" facts + what each stage produced (stage -> info)
 """
@@ -17,7 +18,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-STAGE_DIRS = ("raw", "unpacked", "il2cpp", "code", "csharp", "types", "ghidra", "assets", "data")
+STAGE_DIRS = ("raw", "unpacked", "il2cpp", "code", "csharp", "types", "ghidra", "assets", "video", "data")
 GAME = "game"  # manifest key holding facts about the game build (never hard-coded constants)
 
 
@@ -54,6 +55,8 @@ class Workspace:
         facts = self.facts()
         if name not in facts:
             raise RuntimeError(f"game fact {name!r} not recorded yet: run the stage that discovers it first")
+        if facts[name] is None:
+            raise RuntimeError(f"game fact {name!r} is unknown: unpack could not read it (see the unpack warnings)")
         return facts[name]
 
     def record_facts(self, facts: dict) -> None:

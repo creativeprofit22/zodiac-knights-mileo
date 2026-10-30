@@ -11,12 +11,14 @@ Extracts the APKs and lists the engine, code and asset files of the Unity 6 IL2C
 
 ## Outputs
 - `unpacked/<version>/<apk stem>/` for each APK, e.g. `unpacked/0.4.6-17/base/`. Each APK is extracted into `<stem>.partial/` and renamed when done, so an interrupted run is never mistaken for a finished one.
+- Before extracting, it deletes every `unpacked/<version>/<stem>/` folder whose `<stem>.apk` is no longer in `raw/<v>/apk/` (a split that was uninstalled or renamed), so the inventory never reads stale files. This happens with or without `--force`.
 - Manifest `unpack` info. Paths are relative to `unpacked/<version>/`:
 
 | key | meaning |
 |---|---|
 | `version` | build label |
 | `extracted` | APKs extracted in this run (`[]` when all were already unpacked) |
+| `removed` | sorted folder names deleted because their APK is gone (`[]` when none) |
 | `path` | absolute `unpacked/<version>/` |
 | `abis` | sorted ABIs that have `lib/<abi>/libil2cpp.so` |
 | `il2cpp` | `{abi: path to libil2cpp.so}` |
@@ -60,4 +62,4 @@ Extracts the APKs and lists the engine, code and asset files of the Unity 6 IL2C
 - `ScriptingAssemblies.json`;
 - `assets/Video`.
 
-It checks every manifest field, that reruns skip extraction and `--force` re-extracts, that an unknown metadata version only adds a warning, and that an empty tree produces warnings.
+It checks every manifest field, that reruns skip extraction and `--force` re-extracts, that an orphan folder is removed and not inventoried, that an unknown metadata version only adds a warning, and that an empty tree produces warnings.

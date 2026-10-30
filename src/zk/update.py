@@ -4,7 +4,9 @@ Modelled on SSA update.py (6e1be49). A step is current when its manifest record 
 whose fingerprint parts (code closure, adapters, pinned tools, packages, options) and inputs (version,
 argv, and digests of what it `uses` from upstream steps) still match, and its outputs exist. So an upstream
 rerun cascades only when the files or record values a step consumes changed. A manual `zk <stage>`
-rewrites the record without a stamp, so the next update reruns it. Stage knowledge lives in zk.steps.
+rewrites the record without a stamp, so the next update reruns it. Every run passes the step's force argv,
+except a `resumable` step resuming its own failed update run with unchanged parts and inputs.
+Stage knowledge lives in zk.steps.
 """
 from __future__ import annotations
 
@@ -20,13 +22,15 @@ from pathlib import Path
 from types import ModuleType
 
 from . import stages
-from .core.codehash import fingerprint_parts
+from .core.codehash import fingerprint_parts, unfingerprinted_options
 from .core.context import Context
 from .core.runner import run_stage
 from .steps import STEPS, Path_, Step
 
 REPORT_KEY = "update"
 NO_STAMP = "no stamp (never run by update, or run manually)"
+FORCED = "forced: no stamp, inputs may have changed"
+RESUMES = "resumes its failed run (inputs unchanged)"
 MAX_OUTPUT_REASONS = 3
 _ABSENT = object()
 
@@ -75,6 +79,13 @@ def parts_diff(old: dict, new: dict) -> list[str]:
         po, pn = o.get(port, {}), n.get(port, {})
         out += [f"option {port}.{k} changed" for k in sorted({*po, *pn}) if po.get(k) != pn.get(k)]
     return out
+
+
+def without_options(parts: dict, ignored: dict[str, frozenset[str]]) -> dict:
+    """`parts` minus option keys now declared unfingerprinted, so stamps written before keep matching."""
+    options = {port: {k: v for k, v in opts.items() if k not in ignored.get(port, frozenset())}
+               for port, opts in (parts.get("options") or {}).items()}
+    return {**parts, "options": options} if "options" in parts else parts
 
 
 def inputs_diff(old: dict, new: dict) -> list[str]:
@@ -140,6 +151,7 @@ class Updater:
         self.memo: dict[str, tuple[int, int, str]] = {}  # rel -> (size, mtime_ns, sha256): read once per run
         self.snapshot: dict[str, str | None] = {}  # stamp fingerprints at run start, for legacy stamps
         self.changed: set[str] = set()
+        self.previous: dict[str, dict] = {}  # last update report rows, by step
 
     # --- decisions -------------------------------------------------------------------------------------
     def _record(self, name: str) -> dict:
@@ -155,6 +167,10 @@ class Updater:
 
     def _start(self) -> None:
         self.memo, self.snapshot, self.changed = {}, {}, set()
+        report = self._record(REPORT_KEY)
+        rows = report.get("steps")
+        rows = rows if isinstance(rows, list) else []
+        self.previous = {r["step"]: r for r in rows if isinstance(r, dict) and isinstance(r.get("step"), str)}
         for step in self.steps:
             stamp = self._stamp_of(step)
             self.snapshot[step.name] = stamp.get("fingerprint")
@@ -229,8 +245,10 @@ class Updater:
             d.reasons = [NO_STAMP]
             return d
         try:
-            d.parts = self._parts(step, stamp["parts"].get("adapters", {}))
-            d.reasons = parts_diff(stamp["parts"], d.parts)
+            ports = sorted(stamp["parts"].get("adapters", {}))
+            d.parts = self._parts(step, ports)
+            old_parts = without_options(stamp["parts"], unfingerprinted_options(ports, self.ctx.cfg))
+            d.reasons = parts_diff(old_parts, d.parts)
         except RuntimeError as e:
             d.reasons = [str(e)]
         old = stamp.get("inputs") or {}
@@ -250,6 +268,29 @@ class Updater:
             d.maybe = [u for u in step.after if u in busy]
         return d
 
+    def _resume_key(self, step: Step, d: Decision, ports: Iterable[str]) -> dict | None:
+        try:
+            ports = sorted(ports)
+            return {"ports": ports, "fingerprint": fingerprint(self._parts(step, ports), d.inputs, {})}
+        except RuntimeError:
+            return None
+
+    def _resumes(self, step: Step, d: Decision) -> bool:
+        """A resumable step whose last update run failed, with the same parts and inputs as then."""
+        row = self.previous.get(step.name) or {}
+        key = row.get("resume")
+        if not step.resumable or row.get("status") != "failed" or not isinstance(key, dict):
+            return False
+        return self._resume_key(step, d, key.get("ports") or []) == key
+
+    def _force(self, step: Step, d: Decision, force: bool) -> tuple[bool, str]:
+        """Whether a run of a non-source step passes its force argv, and the note explaining an unstamped one."""
+        if force or self._stamp_of(step):
+            return True, ""
+        if self._resumes(step, d):
+            return False, RESUMES
+        return True, FORCED
+
     def _timing(self, step: Step) -> str:
         stamp = self._stamp_of(step)
         if "seconds" in stamp:
@@ -268,7 +309,8 @@ class Updater:
             else:
                 d = self.decide(step, force, pending)
                 if d.reasons:
-                    decision, reason = "run", "; ".join(d.reasons)
+                    note = self._force(step, d, force)[1]
+                    decision, reason = "run", "; ".join([*d.reasons, *([note] if note else [])])
                 elif d.maybe:
                     decision, reason = "maybe", f"reruns if {' or '.join(d.maybe)} output changes"
                 else:
@@ -298,14 +340,16 @@ class Updater:
         self.ctx.ws.record(step.name, rec)
 
     def _refresh(self, step: Step, d: Decision) -> None:
-        """After a skip, rewrite the stamp only if it is old-format or its file cache moved."""
+        """After a skip, rewrite the stamp only if it is old-format, holds dropped options or its file cache moved."""
         rec = self._record(step.name)
         stamp = rec.get("update_stamp") or {}
-        if d.parts is None or not (d.legacy or (stamp.get("file_cache") or {}) != d.cache):
+        if d.parts is None or not (d.legacy or stamp.get("parts") != d.parts
+                                   or (stamp.get("file_cache") or {}) != d.cache):
             return
         stamp = {k: v for k, v in stamp.items() if k != "file_cache"}
-        stamp.update(fingerprint=fingerprint(stamp.get("parts") or {}, d.inputs, stamp.get("result") or {}),
-                     inputs=d.inputs)
+        # skipped means parts_diff found no difference, so d.parts equals the stamp's parts minus dropped options
+        stamp.update(fingerprint=fingerprint(d.parts, d.inputs, stamp.get("result") or {}),
+                     parts=d.parts, inputs=d.inputs)
         if d.cache:
             stamp["file_cache"] = d.cache
         rec["update_stamp"] = stamp
@@ -316,10 +360,14 @@ class Updater:
         if rec.pop("update_stamp", None) is not None:
             self.ctx.ws.record(step.name, rec)
 
-    def _row(self, step: Step, status: str, reason: str, seconds: float | None = None) -> dict:
+    def _row(self, step: Step, status: str, reason: str, seconds: float | None = None,
+             resume: dict | None = None) -> dict:
         rec = self._record(step.name) if status in ("ran", "skipped") else {}
         counts = {label: lookup(rec, path) for label, path in step.report.items()} if rec else {}
-        return {"step": step.name, "status": status, "reason": reason, "seconds": seconds, "counts": counts}
+        row = {"step": step.name, "status": status, "reason": reason, "seconds": seconds, "counts": counts}
+        if resume is not None:
+            row["resume"] = resume  # parts+inputs of the failed run, so the next run can tell it may resume
+        return row
 
     def run(self, start: str | None = None, force: bool = False, dry_run: bool = False) -> int:
         names = [s.name for s in self.steps]
@@ -339,6 +387,7 @@ class Updater:
             if failed or i < first:
                 rows.append(self._row(step, "not run", "earlier step failed" if failed else f"--from {start}"))
                 continue
+            note = ""
             if step.source:
                 d = Decision([], {"argv": list(step.argv)})
                 argv = [*step.argv, *(step.force_argv if force else ())]
@@ -349,10 +398,12 @@ class Updater:
                     _say(f"[update] {step.name}: skipped (unchanged)")
                     rows.append(self._row(step, "skipped", "unchanged"))
                     continue
-                argv = [*step.argv, *(step.force_argv if force or stamp else ())]
+                forced, note = self._force(step, d, force)
+                argv = [*step.argv, *(step.force_argv if forced else ())]
             reasons = d.reasons
+            shown = [*reasons, *([note] if note else [])]
             _say(f"[update] {step.name}: running `{self.prog} {' '.join([step.name, *argv])}`"
-                 + (f" ({'; '.join(reasons)})" if reasons else ""))
+                 + (f" ({'; '.join(shown)})" if shown else ""))
             t = self.clock()
             try:
                 self._execute(step, argv)
@@ -362,7 +413,8 @@ class Updater:
                 rerun = " ".join([self.prog, step.name, *argv])
                 _say(f"[update] {step.name} failed: {e}\n  rerun:  {rerun}\n"
                      f"  resume: {self.prog} update --from {step.name}", err=True)
-                rows.append(self._row(step, "failed", f"{type(e).__name__}: {e}", seconds))
+                resume = self._resume_key(step, d, self.ctx.used) if step.resumable and not step.source else None
+                rows.append(self._row(step, "failed", f"{type(e).__name__}: {e}", seconds, resume))
                 failed = True
                 continue
             seconds = round(self.clock() - t, 1)

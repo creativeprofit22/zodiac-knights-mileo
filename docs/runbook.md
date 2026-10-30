@@ -32,9 +32,9 @@ The plan line for each step shows its last duration, or an estimate if it never 
   resume: zk update --from ghidra
 ```
 
-Fix the cause, then either rerun just that stage with the `rerun` command or resume the whole chain with `--from`. With `--from`, earlier steps aren't run; later steps compare what they use from them (the files and record values on disk now) against their stamps. A step that failed has no stamp, so the next `zk update` reruns it anyway.
+Fix the cause, then either rerun just that stage with the `rerun` command or resume the whole chain with `--from`. With `--from`, earlier steps aren't run; later steps compare what they use from them (the files and record values on disk now) against their stamps. A step that failed has no stamp, so the next `zk update` reruns it anyway, with `--force` (plan line: `forced: no stamp, inputs may have changed`). Only `assets` and `ghidra` resume instead, without `--force`, and only when nothing they depend on changed since the failure (plan line: `resumes its failed run (inputs unchanged)`); a long ghidra or assets export isn't thrown away by a resume.
 
-Running a stage by hand (`zk ghidra`) records it without an update stamp, so the next `zk update` reruns it and everything after it. That's deliberate: update can't tell what arguments a manual run used.
+Running a stage by hand (`zk ghidra`) records it without an update stamp, so the next `zk update` reruns it with `--force` and everything after it. That's deliberate: update can't tell what arguments or inputs a manual run used.
 
 `zk update --force` reruns every step with `--force` (acquire with `adb` then pulls the APK again, several GB).
 

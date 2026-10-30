@@ -44,7 +44,7 @@ def _setup(tmp_path, **cfg):
 
 
 def _out(tmp_path):
-    return tmp_path / "ws" / "assets" / VERSION / "video"
+    return tmp_path / "ws" / "video" / VERSION
 
 
 def _run(config, *argv):
@@ -121,7 +121,19 @@ def test_encode_goes_through_the_port(tmp_path):
     rec = _record(tmp_path)
     assert rec["encoded"] == {n: {"tool": "fake", "frames": 3, "fps": 15} for n in ("a", "b")}
     assert (_out(tmp_path) / "a" / "encoded.mp4").read_bytes() == b"fake 3 frames @ 15"
-    assert _run(config, "--encode") == 0 and _record(tmp_path)["encoded"] == {}
+
+
+def test_encode_rerun_records_skipped_clips(tmp_path):
+    config, _ = _setup(tmp_path)
+    assert _run(config, "--encode") == 0
+    report = json.loads((_out(tmp_path) / "report.json").read_text(encoding="utf-8"))
+    assert set(report["encoded"]) == {"a", "b"} and report["encoded"]["a"]["tool"] == "fake"
+    assert _run(config, "--encode") == 0
+    out = _out(tmp_path)
+    size = len(b"fake 3 frames @ 15")
+    want = {n: {"skipped": True, "output": str(out / n / "encoded.mp4"), "bytes": size} for n in ("a", "b")}
+    assert _record(tmp_path)["encoded"] == want
+    assert json.loads((out / "report.json").read_text(encoding="utf-8"))["encoded"] == want
 
 
 def test_encode_without_ffmpeg_fails_clearly(tmp_path, capsys, monkeypatch):

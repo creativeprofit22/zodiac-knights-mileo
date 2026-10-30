@@ -57,6 +57,7 @@ Formats:
 [scripting_assemblies](docs/formats/scripting_assemblies.md),
 [il2cpp_script](docs/formats/il2cpp_script.md),
 [csharp_dump](docs/formats/csharp_dump.md),
+[csharp_dump_diff](docs/formats/csharp_dump_diff.md),
 [csharp_project](docs/formats/csharp_project.md),
 [rgbv](docs/formats/rgbv.md),
 [mp4](docs/formats/mp4.md),

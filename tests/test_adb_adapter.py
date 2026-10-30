@@ -159,3 +159,20 @@ def test_base_apk_pull_failure_becomes_runtime_error(tmp_path):
     with pytest.raises(RuntimeError, match=r"pull /data/app/.*base\.apk.*exit 1") as exc:
         _src(fake).pull(PKG, tmp_path)
     assert isinstance(exc.value.__cause__, subprocess.CalledProcessError)
+
+
+def test_repull_drops_splits_no_longer_installed(tmp_path):
+    _src(FakeAdb(paths="package:/data/app/x/base.apk\npackage:/data/app/x/split_old.apk\n")).pull(PKG, tmp_path)
+    info = _src(FakeAdb(paths="package:/data/app/x/base.apk\n")).pull(PKG, tmp_path)
+    assert info["pulled"]["apk"] == ["base.apk"]
+    assert sorted(p.name for p in (tmp_path / "apk").iterdir()) == ["base.apk"]
+    assert not (tmp_path / ".apk.partial").exists()
+
+
+def test_failed_apk_repull_keeps_previous_apks(tmp_path):
+    _src(FakeAdb(paths="package:/data/app/x/base.apk\npackage:/data/app/y/split_x.apk\n")).pull(PKG, tmp_path)
+    fake = FakeAdb(paths="package:/data/app/x/base.apk\npackage:/data/app/y/split_x.apk\n", unreadable=("/data/app/y/",))
+    with pytest.raises(RuntimeError, match="split_x"):
+        _src(fake).pull(PKG, tmp_path)
+    assert sorted(p.name for p in (tmp_path / "apk").iterdir()) == ["base.apk", "split_x.apk"]
+    assert not (tmp_path / ".apk.partial").exists()

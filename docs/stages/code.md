@@ -33,14 +33,15 @@ Recovers the game's C# types and method signatures from the IL2CPP build, checks
 ## Arguments
 | flag | default | meaning |
 |---|---|---|
-| `--abi` | `arm64-v8a` | which `libil2cpp.so` to dump |
+| `--abi` | the device ABI (`acquire` `abi`) if unpacked, else `arm64-v8a`, else the only unpacked ABI | which `libil2cpp.so` to dump |
 | `--force` | off | delete `il2cpp/<v>/` and `code/<v>/` and rerun every step |
-| `--skip-crosscheck` | off | do not run `il2cpp_crosscheck` |
+| `--skip-crosscheck` | off | do not run `il2cpp_crosscheck`, and delete `il2cpp/<v>/crosscheck/` and `crosscheck.json` left by an earlier run (they would describe another dump) |
 | `--skip-java` | off | do not run `java_decompiler` |
 
 ## Failure modes
 - `RuntimeError` (exit code 2), and nothing is recorded:
   - there is no `unpack` record for the current version, the ABI has no `libil2cpp.so`, `global-metadata.dat` is missing, or no game assemblies were found (run `zk unpack`, or pass `--abi`);
+  - no `--abi` is given and none of the default choices was unpacked while several ABIs were (pass `--abi`);
   - an adapter fails or leaves its artifact contract incomplete;
   - a game assembly has no types in `summary.json` or no `DummyDll/<name>.dll`;
   - type counts differ between the two dumpers for any game assembly. Read `crosscheck.json` to see where.

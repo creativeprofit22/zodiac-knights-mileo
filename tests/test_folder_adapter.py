@@ -58,3 +58,30 @@ def test_folder_without_base_apk(tmp_path):
 def test_identify_needs_options(tmp_path, opts, match):
     with pytest.raises(RuntimeError, match=match):
         folder.create(_cfg(tmp_path, **opts)).identify(PKG)
+
+
+def test_repull_drops_apks_no_longer_in_source(tmp_path):
+    s = tmp_path / "src"
+    s.mkdir()
+    (s / "base.apk").write_bytes(b"A")
+    (s / "split_old.apk").write_bytes(b"B")
+    src = folder.create(_cfg(tmp_path, path="src", version="v1"))
+    src.pull(PKG, tmp_path / "out")
+    (s / "split_old.apk").unlink()
+    assert src.pull(PKG, tmp_path / "out")["pulled"]["apk"] == ["base.apk"]
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["apk"]
+    assert sorted(p.name for p in (tmp_path / "out" / "apk").iterdir()) == ["base.apk"]
+
+
+def test_failed_repull_keeps_previous_apks(tmp_path):
+    s = tmp_path / "src"
+    s.mkdir()
+    (s / "base.apk").write_bytes(b"A")
+    folder.create(_cfg(tmp_path, path="src", version="v1")).pull(PKG, tmp_path / "out")
+    (s / "split.apk").write_bytes(b"B")
+    (tmp_path / "out" / "data").write_bytes(b"not a folder")  # so copying notes.txt into data/ fails
+    (s / "notes.txt").write_text("n")
+    with pytest.raises(OSError):
+        folder.create(_cfg(tmp_path, path="src", version="v1")).pull(PKG, tmp_path / "out")
+    assert sorted(p.name for p in (tmp_path / "out" / "apk").iterdir()) == ["base.apk"]
+    assert not (tmp_path / "out" / ".apk.partial").exists()

@@ -12,7 +12,9 @@ from dataclasses import dataclass, field
 Path_ = tuple[str, ...]
 
 SO = "unpacked/{version}/*/lib/*/libil2cpp.so"
+APKS = "raw/{version}/apk/*.apk"  # unpack extracts every one; code hands one to jadx
 METADATA = "unpacked/{version}/*/assets/bin/Data/Managed/Metadata/global-metadata.dat"
+ABI: Path_ = ("abi",)  # the device ABI picks the default --abi (stages/_unpack.resolve_abi)
 UNPACK_RECORD: tuple[Path_, ...] = (("il2cpp",), ("metadata", "path"), ("assemblies", "game"))
 
 
@@ -32,6 +34,7 @@ class Step:
     argv: tuple[str, ...] = ()
     force_argv: tuple[str, ...] = ("--force",)
     source: bool = False  # always runs; counts as unchanged when its fingerprint_keys result is unchanged
+    resumable: bool = False  # after its own failed run, with unchanged parts and inputs, reruns without force_argv
     fingerprint_keys: tuple[str, ...] = ()
     report: dict[str, Path_] = field(default_factory=dict)
     checks: dict[str, Path_] = field(default_factory=dict)
@@ -48,11 +51,12 @@ STEPS: tuple[Step, ...] = (
          outputs=("raw/{version}/apk/base.apk",),
          report={"base.apk sha256": ("base_apk", "sha256"), "pulled": ("pulled",)},
          estimate="secs (a new pull: GBs)"),
-    Step("unpack", uses={"acquire": Uses(record=(("base_apk", "sha256"),))}, outputs=("unpacked/{version}",),
+    Step("unpack", uses={"acquire": Uses(files=(APKS,), record=(("base_apk", "sha256"),))},
+         outputs=("unpacked/{version}",),
          report={"serialized files": ("serialized_files",), "videos": ("videos", "files", "#"),
                  "unity": ("unity_version",), "metadata": ("metadata", "version")},
          warnings=(("warnings",),), estimate="~1 min"),
-    Step("code", uses={"acquire": Uses(record=(("base_apk", "sha256"),)),
+    Step("code", uses={"acquire": Uses(files=(APKS,), record=(("base_apk", "sha256"), ABI)),
                        "unpack": Uses(files=(SO, METADATA, "unpacked/{version}/*/classes*.dex"),
                                       record=UNPACK_RECORD)},
          outputs=("il2cpp/{version}/summary.json", "il2cpp/{version}/crosscheck.json", "code/{version}"),
@@ -60,22 +64,25 @@ STEPS: tuple[Step, ...] = (
          checks={"dumper cross-check types match": ("crosscheck", "types_match"),
                  "dumper method-gap classes": ("crosscheck", "method_gap_classes")},
          estimate="~3 min"),
-    Step("csharp", uses={"unpack": Uses(files=(SO, METADATA), record=(*UNPACK_RECORD, ("unity_version",)))},
+    Step("csharp", uses={"acquire": Uses(record=(ABI,)),
+                         "unpack": Uses(files=(SO, METADATA), record=(*UNPACK_RECORD, ("unity_version",)))},
          outputs=("csharp/{version}/report.json",),
          report={"types": ("report", "*", "types")}, estimate="~1 min"),
-    Step("ghidra", uses={"unpack": Uses(files=(SO,), record=(("il2cpp",),)),
+    Step("ghidra", uses={"acquire": Uses(record=(ABI,)),
+                         "unpack": Uses(files=(SO,), record=(("il2cpp",),)),
                          "code": Uses(files=("il2cpp/{version}/script.json", "il2cpp/{version}/il2cpp.h"),
                                       record=(("version",), ("abi",)))},
-         outputs=("ghidra/{version}/index.json", "ghidra/{version}/project"),
+         outputs=("ghidra/{version}/index.json", "ghidra/{version}/project"), resumable=True,
          report={"classes": ("classes_targeted",), "functions": ("functions_targeted",),
                  "classes missing": ("analysis", "classes_missing")},
          estimate="~45 min; ~3 h with full decompile (HDD)"),
-    Step("assets", uses={"unpack": Uses(files=(SO, METADATA), trees=("unpacked/{version}/*/assets/bin/Data",),
+    Step("assets", uses={"acquire": Uses(record=(ABI,)),
+                         "unpack": Uses(files=(SO, METADATA), trees=("unpacked/{version}/*/assets/bin/Data",),
                                         record=(*UNPACK_RECORD, ("unity_version",))),
                          "code": Uses(files=("il2cpp/{version}/summary.json", "il2cpp/{version}/crosscheck/summary.json",
                                              "il2cpp/{version}/DummyDll/*.dll"),
                                       record=(("version",),))},
-         outputs=("assets/{version}/report.json", "types/{version}/nodes.json"),
+         outputs=("assets/{version}/report.json", "types/{version}/nodes.json"), resumable=True,
          report={"exported": ("exported",), "misses": ("misses",)},
          checks={"MonoBehaviour failed": ("monobehaviours", "failed"),
                  "MonoBehaviour failures by reason": ("monobehaviours", "by_reason"),
@@ -83,7 +90,7 @@ STEPS: tuple[Step, ...] = (
                  "assets cross-check unexplained": ("crosscheck", "unexplained")},
          estimate="~1-10 min"),
     Step("video", uses={"unpack": Uses(trees=("unpacked/{version}/*/assets/Video",), record=(("videos",),))},
-         outputs=("assets/{version}/video/report.json",),
+         outputs=("video/{version}/report.json",),
          report={"clips": ("clips",), "frames": ("frames",), "mismatches": ("mismatches",)},
          estimate="~1 min"),
 )

@@ -13,7 +13,7 @@ from collections.abc import Iterable, Mapping
 
 from zk.formats import il2cpp_script
 from zk.ports import PORTS
-from zk.stages._unpack import unpack_inputs
+from zk.stages._unpack import add_abi_argument, check_code_record, resolve_abi, unpack_inputs
 
 NAME = "ghidra"
 HELP = "analyze libil2cpp.so in headless Ghidra and export decompiled C per ZodiacKnights class"
@@ -36,7 +36,7 @@ _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def add_arguments(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--abi", default="arm64-v8a", help="which libil2cpp.so to analyze (default: arm64-v8a)")
+    add_abi_argument(p, "which libil2cpp.so to analyze")
     p.add_argument("--skip-analysis", action="store_true",
                    help="reuse the saved Ghidra project and only (re-)export missing .c files")
     p.add_argument("--filter", default=None, metavar="REGEX",
@@ -85,15 +85,6 @@ def target_lines(targets: Mapping[tuple[str, str], list[int]]) -> list[str]:
     return [f"{rva:x}\t{class_relpath(ns, cls)}" for (ns, cls), rvas in targets.items() for rva in rvas]
 
 
-def _check_code_record(ctx, version: str, abi: str) -> None:
-    code = ctx.ws.manifest().get("code")
-    if not code or code.get("version") != version:
-        raise RuntimeError(f"no code record for {version}: run `zk code` first")
-    if code.get("abi") != abi:
-        raise RuntimeError(f"script.json was dumped for ABI {code.get('abi')!r} by `zk code`, not {abi!r}: "
-                           f"rerun `zk code --abi {abi}` or pass `--abi {code.get('abi')}`")
-
-
 def execute(ctx, args: argparse.Namespace) -> dict:
     if args.filter:
         try:
@@ -101,8 +92,9 @@ def execute(ctx, args: argparse.Namespace) -> dict:
         except re.error as e:
             raise RuntimeError(f"--filter {args.filter!r} is not a valid regex: {e}") from e
     version = ctx.ws.current_version()
-    binary, _, _ = unpack_inputs(ctx, version, args.abi)
-    _check_code_record(ctx, version, args.abi)
+    abi = resolve_abi(ctx, version, args.abi)
+    binary, _, _ = unpack_inputs(ctx, version, abi)
+    check_code_record(ctx, version, abi, "script.json")
     dump_dir = ctx.ws.root / "il2cpp" / version
     PORTS["il2cpp_dump"].contract.verify(dump_dir)
     script_path = dump_dir / "script.json"
@@ -127,10 +119,10 @@ def execute(ctx, args: argparse.Namespace) -> dict:
         roots[root_of(ns)] = roots.get(root_of(ns), 0) + 1
 
     mode = "export only (saved project)" if args.skip_analysis else "import + analysis + export"
-    print(f"[ghidra] {binary.name} ({args.abi}): {len(targets)} classes, {mode} -> {out}")
+    print(f"[ghidra] {binary.name} ({abi}): {len(targets)} classes, {mode} -> {out}")
     info = ctx.adapter("ghidra").analyze(binary, dump_dir, targets_path, out, args.skip_analysis)
     PORTS["ghidra"].contract.verify(out)
-    return {"version": version, "abi": args.abi, "skip_analysis": args.skip_analysis, "filter": args.filter,
+    return {"version": version, "abi": abi, "skip_analysis": args.skip_analysis, "filter": args.filter,
             "limit": args.limit, "classes_targeted": len(targets),
             "functions_targeted": sum(len(v) for v in targets.values()), "roots": dict(sorted(roots.items())),
             "analysis": info}

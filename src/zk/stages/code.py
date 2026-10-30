@@ -9,16 +9,16 @@ import json
 import shutil
 from pathlib import Path
 
+from zk.formats.csharp_dump_diff import compare
 from zk.ports import PORTS
-from zk.stages._unpack import unpack_inputs
-from zk.stages.assets._compare import compare
+from zk.stages._unpack import add_abi_argument, resolve_abi, unpack_inputs
 
 NAME = "code"
 HELP = "dump IL2CPP types/methods, cross-check them with a second dumper, and decompile the Java code"
 
 
 def add_arguments(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--abi", default="arm64-v8a", help="which libil2cpp.so to dump (default: arm64-v8a)")
+    add_abi_argument(p, "which libil2cpp.so to dump")
     p.add_argument("--force", action="store_true", help="delete earlier outputs and rerun every step")
     p.add_argument("--skip-crosscheck", action="store_true", help="do not run the il2cpp_crosscheck port")
     p.add_argument("--skip-java", action="store_true", help="do not run the java_decompiler port")
@@ -53,7 +53,8 @@ def _java_apk(ctx, version: str) -> Path:
 
 def execute(ctx, args: argparse.Namespace) -> dict:
     version = ctx.ws.current_version()
-    binary, metadata, game = unpack_inputs(ctx, version, args.abi)
+    abi = resolve_abi(ctx, version, args.abi)
+    binary, metadata, game = unpack_inputs(ctx, version, abi)
     il2cpp = ctx.ws.dir("il2cpp", version)
     code = ctx.ws.dir("code", version)
     if args.force:
@@ -61,17 +62,21 @@ def execute(ctx, args: argparse.Namespace) -> dict:
             shutil.rmtree(d)
             d.mkdir(parents=True)
 
-    print(f"[code] il2cpp_dump {binary.name} ({args.abi}) -> {il2cpp}")
+    print(f"[code] il2cpp_dump {binary.name} ({abi}) -> {il2cpp}")
     dump_info = ctx.adapter("il2cpp_dump").dump(binary, metadata, il2cpp)
     PORTS["il2cpp_dump"].contract.verify(il2cpp)
     summary = _read_json(il2cpp / "summary.json")
     _check_game_assemblies(il2cpp, summary, game)
-    info: dict = {"version": version, "abi": args.abi, "game_assemblies": sorted(game),
+    info: dict = {"version": version, "abi": abi, "game_assemblies": sorted(game),
                   "dump": {**dump_info, "assemblies": {n: {k: summary["assemblies"][n][k] for k in ("types", "methods")}
                                                        for n in sorted(game)}},
                   "crosscheck": None, "java": None}
 
-    if not args.skip_crosscheck:
+    if args.skip_crosscheck:
+        # an earlier run's crosscheck belongs to another dump; assets must not compare against it
+        shutil.rmtree(il2cpp / "crosscheck", ignore_errors=True)
+        (il2cpp / "crosscheck.json").unlink(missing_ok=True)
+    else:
         cc = il2cpp / "crosscheck"
         cc.mkdir(exist_ok=True)
         print(f"[code] il2cpp_crosscheck -> {cc}")

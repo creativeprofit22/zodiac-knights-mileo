@@ -106,17 +106,26 @@ class AdbSource:
         remotes = parse_pm_path(self._sh("pm", "path", package))
         if not remotes:
             raise RuntimeError(f"`pm path {package}` listed no APKs")
-        apk_dir = Path(dest) / "apk"
-        apk_dir.mkdir(parents=True, exist_ok=True)
+        # pull into a staging folder and swap it in only on success, so splits no longer installed
+        # do not linger in apk/ and a failed pull keeps the previous copy
+        staging = Path(dest) / ".apk.partial"
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
         names = []
         for remote in remotes:
             name = remote.rsplit("/", 1)[1]
-            cmd = self._cmd("pull", remote, str(apk_dir / name))
+            cmd = self._cmd("pull", remote, str(staging / name))
             try:
                 self.run(cmd)
             except (subprocess.CalledProcessError, OSError) as e:
+                shutil.rmtree(staging)
                 raise _failure(cmd, e) from e
             names.append(name)
+        apk_dir = Path(dest) / "apk"
+        if apk_dir.exists():
+            shutil.rmtree(apk_dir)
+        staging.rename(apk_dir)
         pulled: dict[str, object] = {"apk": sorted(names), "obb": False, "data": False}
         for kind, remote in (("obb", f"/sdcard/Android/obb/{package}"), ("data", f"/sdcard/Android/data/{package}")):
             pulled[kind] = self._pull_dir(remote, Path(dest), kind)

@@ -166,3 +166,55 @@ def test_reference_payload_classes_count_as_used_in_the_crosscheck(tmp_path, loa
     asm = cc["assemblies"]["Unity.Payloads"]
     assert asm["differences"]["Pay.Load"] == {"counts": [2, 3], "used": True, "rule": None}
     assert asm["unexplained"] == ["Pay.Load"] and cc["unexplained"] == 1
+
+
+def test_assets_force_keeps_video_output(tmp_path, load):
+    from tests.test_formats_video import rgbv_bytes
+    from tests.test_stage_video import _clip, _mp4
+    cfg = _coded(tmp_path)
+    version = _manifest(tmp_path)["game"]["version"]
+    vdir = tmp_path / "ws" / "unpacked" / version / "base" / "assets" / "Video"
+    for f in vdir.iterdir():
+        f.unlink()
+    mp4 = _mp4()
+    (vdir / "a.mp4").write_bytes(mp4)
+    (vdir / "a.rgbv").write_bytes(rgbv_bytes())
+    (vdir / "manifest.json").write_text(json.dumps({"version": 35, "clips": [_clip("a.mp4", mp4)]}), encoding="utf-8")
+    assert cli.main(["--config", str(cfg), "video"]) == 0
+    report = tmp_path / "ws" / "video" / version / "report.json"
+    assert report.is_file()
+    assert cli.main(["--config", str(cfg), "assets", "--force"]) == 0
+    assert report.is_file() and (report.parent / "a" / "index.json").is_file()
+
+
+def test_assets_without_unity_version_fails_cleanly(tmp_path, load, capsys):
+    cfg = _config(tmp_path)
+    for stage in ("acquire", "unpack"):
+        assert cli.main(["--config", str(cfg), stage]) == 0
+    for f in (tmp_path / "ws" / "unpacked").rglob("globalgamemanagers"):
+        f.unlink()
+    for stage in ("unpack", "code"):
+        assert cli.main(["--config", str(cfg), stage]) == 0
+    assert _manifest(tmp_path)["game"]["unity_version"] is None
+    assert cli.main(["--config", str(cfg), "assets"]) == 2
+    assert "'unity_version' is unknown" in capsys.readouterr().err
+    assert "assets" not in _manifest(tmp_path) and load["calls"] == 0
+
+
+def test_assets_rejects_abi_other_than_code_stage(tmp_path, load, capsys):
+    cfg = _coded(tmp_path)
+    other = next(a for a in sorted(_manifest(tmp_path)["unpack"]["il2cpp"]) if a != "arm64-v8a")
+    capsys.readouterr()
+    assert cli.main(["--config", str(cfg), "assets", "--abi", other]) == 2
+    err = capsys.readouterr().err
+    assert "dumped for ABI 'arm64-v8a'" in err and f"zk code --abi {other}" in err
+    assert "assets" not in _manifest(tmp_path) and load["calls"] == 0
+
+
+def test_assets_needs_crosscheck_in_code_record(tmp_path, load):
+    cfg = _coded(tmp_path)
+    m = _manifest(tmp_path)
+    m["code"]["crosscheck"] = None  # files from an earlier run may still exist; the record decides
+    (tmp_path / "ws" / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+    assert cli.main(["--config", str(cfg), "assets"]) == 2
+    assert "assets" not in _manifest(tmp_path) and load["calls"] == 0

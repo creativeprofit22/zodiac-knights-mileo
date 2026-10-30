@@ -11,7 +11,7 @@ import shutil
 from pathlib import Path
 
 from zk.ports import PORTS
-from zk.stages._unpack import unpack_inputs
+from zk.stages._unpack import add_abi_argument, check_code_record, resolve_abi, unpack_inputs
 
 NAME = "csharp"
 HELP = "decompile the game assemblies into browsable C# projects (reconstructed, not the original source)"
@@ -31,7 +31,7 @@ SOURCES = {"cpp2il": "assemblies built by the il2cpp_assemblies port from the bi
 
 
 def add_arguments(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--abi", default="arm64-v8a", help="which libil2cpp.so to read (default: arm64-v8a)")
+    add_abi_argument(p, "which libil2cpp.so to read")
     p.add_argument("--input", choices=INPUTS, default="cpp2il",
                    help="build assemblies with il2cpp_assemblies (default) or reuse the il2cpp_dump DummyDll/")
     p.add_argument("--force", action="store_true", help="delete earlier outputs and rerun")
@@ -49,20 +49,12 @@ def _check_projects(out: Path, report: dict, game: list[str]) -> None:
         raise RuntimeError("C# view is incomplete: " + "; ".join(problems))
 
 
-def _check_code_record(ctx, version: str, abi: str) -> None:
-    code = ctx.ws.manifest().get("code")
-    if not code or code.get("version") != version:
-        raise RuntimeError(f"no code record for {version}: run `zk code` first, or use --input cpp2il")
-    if code.get("abi") != abi:
-        raise RuntimeError(f"DummyDll/ was dumped for ABI {code.get('abi')!r} by `zk code`, not {abi!r}: "
-                           f"rerun `zk code --abi {abi}` or pass `--abi {code.get('abi')}`")
-
-
 def execute(ctx, args: argparse.Namespace) -> dict:
     version = ctx.ws.current_version()
-    binary, metadata, game = unpack_inputs(ctx, version, args.abi)
+    abi = resolve_abi(ctx, version, args.abi)
+    binary, metadata, game = unpack_inputs(ctx, version, abi)
     if args.input == "dummydll":
-        _check_code_record(ctx, version, args.abi)
+        check_code_record(ctx, version, abi, "DummyDll/", ", or use --input cpp2il")
     out = ctx.ws.dir("csharp", version)
     if args.force:
         shutil.rmtree(out)
@@ -77,7 +69,7 @@ def execute(ctx, args: argparse.Namespace) -> dict:
             shutil.rmtree(out / "assemblies")
     else:
         unity = ctx.ws.fact("unity_version")
-        print(f"[csharp] il2cpp_assemblies {binary.name} ({args.abi}, Unity {unity}) -> {out}")
+        print(f"[csharp] il2cpp_assemblies {binary.name} ({abi}, Unity {unity}) -> {out}")
         built = ctx.adapter("il2cpp_assemblies").build(binary, metadata, unity, out)
         PORTS["il2cpp_assemblies"].contract.verify(out)
         assemblies = out / "assemblies"
@@ -92,6 +84,6 @@ def execute(ctx, args: argparse.Namespace) -> dict:
     (out / "README.md").write_text(README.format(version=version, input=args.input, source=SOURCES[args.input]),
                                    encoding="utf-8")
     _check_projects(out, report, game)
-    return {"version": version, "abi": args.abi, "input": args.input, "game_assemblies": sorted(game),
+    return {"version": version, "abi": abi, "input": args.input, "game_assemblies": sorted(game),
             "assemblies": built, "decompiler": dec,
             "report": {n: report["assemblies"][n] for n in sorted(game)}}
